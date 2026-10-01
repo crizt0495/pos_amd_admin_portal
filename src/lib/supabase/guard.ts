@@ -2,7 +2,7 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { env } from '@/lib/env';
+import { env, isSupabaseFullyConfigured, PESAN_ENV_BELUM_DIISI } from '@/lib/env';
 import { createClient } from '@/lib/supabase/server';
 import type { AdminUser } from '@/types';
 
@@ -38,6 +38,12 @@ export type AdminAuthResult =
  * role / dashboard, jadi tidak bisa dipalsukan dari sisi pengguna.
  */
 export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
+  // Preflight: env kosong harus muncul sebagai "belum dikonfigurasi" (503),
+  // bukan "sesi tidak valid" (401) yang membuat admin mengira sesinya jelek.
+  if (!isSupabaseFullyConfigured()) {
+    return { ok: false, error: PESAN_ENV_BELUM_DIISI, status: 503 };
+  }
+
   const supabase = createClient();
 
   // getUser() = verifikasi token ke server (bukan sekadar decode cookie).

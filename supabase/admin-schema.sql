@@ -10,12 +10,13 @@
 --
 --  Yang ditambahkan di sini:
 --    1. Tabel `topup_history`     — riwayat isi ulang kuota oleh admin
---    2. View  `admin_stores`      — partners  -> nama kolom "stores"
---    3. View  `admin_keys`        — licenses  -> nama kolom "keys"
---    4. RPC   `admin_topup`       — top up 1 toko (atomik + audit)
---    5. RPC   `admin_topup_bulk`  — top up banyak toko sekaligus
---    6. RPC   `admin_revoke_key`  — revoke / hidupkan kembali serial key
---    7. Grant + RLS untuk objek baru
+--    2. Tabel `admin_accounts`    — peta username -> email untuk login admin
+--    3. View  `admin_stores`      — partners  -> nama kolom "stores"
+--    4. View  `admin_keys`        — nama kolom "keys"
+--    5. RPC   `admin_topup`       — top up 1 toko (atomik + audit)
+--    6. RPC   `admin_topup_bulk`  — top up banyak toko sekaligus
+--    7. RPC   `admin_revoke_key`  — revoke / hidupkan kembali serial key
+--    8. Grant + RLS untuk objek baru
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
@@ -42,7 +43,37 @@ alter table public.topup_history add column if not exists catatan text;
 create index if not exists idx_topup_history_store on public.topup_history (store_id, created_at desc);
 
 -- ---------------------------------------------------------------------------
--- 2. View: admin_stores
+-- 3. Tabel: admin_accounts  (peta username -> email untuk LOGIN ADMIN)
+--
+--    Supabase Auth tidak punya kolom "username" — identifier-nya selalu email.
+--    Supaya admin tetap bisa login dengan USERNAME, tabel ini yang menyimpan
+--    pemetaannya.
+--
+--    Kenapa tabel, bukan RPC yang bisa dipanggil anon?
+--    Karena Route Handler /api/auth/login me-resolve username -> email DI SERVER
+--    memakai service role. Tidak ada objek yang bisa dibaca anon, jadi tidak ada
+--    permukaan email-enumeration lewat API publik.
+--
+--    Satu email hanya boleh punya satu username (idx_admin_accounts_email).
+-- ---------------------------------------------------------------------------
+create table if not exists public.admin_accounts (
+  username    text primary key
+              check (
+                username = lower(username)
+                and username ~ '^[a-z0-9][a-z0-9._-]{2,31}$'
+              ),
+  email       text        not null,
+  dibuat_pada timestamptz not null default now()
+);
+
+-- migrasi aman untuk database lama
+alter table public.admin_accounts add column if not exists email text;
+
+create unique index if not exists idx_admin_accounts_email
+  on public.admin_accounts (lower(email));
+
+-- ---------------------------------------------------------------------------
+-- 4. View: admin_stores
 --    Memetakan `partners` ke nama kolom sesuai spec admin portal:
 --      nama_toko, email, no_hp, alamat, tier, total_terjual, sisa_kuota,
 --      komisi_total, is_active, created_at, username
@@ -71,7 +102,7 @@ create or replace view public.admin_stores as
   from public.partners p;
 
 -- ---------------------------------------------------------------------------
--- 3. View: admin_keys
+-- 5. View: admin_keys
 --    Memetakan `licenses` + join nama toko penjual.
 -- ---------------------------------------------------------------------------
 create or replace view public.admin_keys as
@@ -98,7 +129,7 @@ create or replace view public.admin_keys as
   left join public.partners p on p.id = l.partner_id;
 
 -- ---------------------------------------------------------------------------
--- 4. RPC: admin_topup  (tambah/berkurangi kuota 1 toko, atomik + audit)
+-- 6. RPC: admin_topup  (tambah/berkurangi kuota 1 toko, atomik + audit)
 --
 --    `p_jumlah` boleh negatif (koreksi admin). Sisa kuota dijaga >= 0, dan
 --    `jumlah_diterapkan` melaporkan perubahan BENAR yang terjadi — jadi -10
@@ -163,7 +194,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 5. RPC: admin_topup_bulk  (top up beberapa toko dalam 1 transaksi)
+-- 7. RPC: admin_topup_bulk  (top up beberapa toko dalam 1 transaksi)
 --    Toko yang tidak ditemukan dilaporkan per-baris, tidak membatalkan sisanya.
 -- ---------------------------------------------------------------------------
 create or replace function public.admin_topup_bulk(
@@ -224,7 +255,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 6. RPC: admin_revoke_key  (revoke / aktifkan kembali serial key)
+-- 8. RPC: admin_revoke_key  (revoke / aktifkan kembali serial key)
 --    Saat dicabut, kunci perangkat dilepas supaya key bisa di-generate ulang
 --    atau dipakai lagi tanpa sisa hwid lama.
 -- ---------------------------------------------------------------------------
@@ -265,17 +296,20 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 7. RLS & Grants
+-- 9. RLS & Grants
 --    Semua akses admin lewat SERVICE ROLE key dari Route Handler, jadi objek
 --    baru di bawah TIDAK diberi policy untuk anon/authenticated — RLS aktif
 --    tanpa policy = tolak semua (paling aman kalau kunci service role bocor).
 -- ---------------------------------------------------------------------------
 alter table public.topup_history enable row level security;
+alter table public.admin_accounts enable row level security;
 
 drop policy if exists "topup_history_admin_all" on public.topup_history;
+drop policy if exists "admin_accounts_admin_all" on public.admin_accounts;
 
 grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update, delete on public.topup_history to service_role;
+grant select, insert, update, delete on public.admin_accounts to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
 -- View dieksekusi dengan hak PEMAKAI yang memanggil, jadi grant eksplisit wajib.
@@ -287,13 +321,18 @@ grant execute on function public.admin_topup_bulk(uuid[], integer, text, text) t
 grant execute on function public.admin_revoke_key(uuid, text)                to service_role;
 
 -- ---------------------------------------------------------------------------
--- 8. SETUP ADMIN
+-- 10. SETUP ADMIN
 --     1. Buat akun admin di Supabase Dashboard > Authentication > Users > Add user
 --        (centang "Auto Confirm User", email = email super admin kamu).
---     2. Pasang role super_admin:
---          npm run bootstrap:admin -- admin@email.com
---        (script ini menulis app_metadata.role = 'super_admin')
---     3. Isi ADMIN_EMAIL di environment project Vercel pos-amd-admin-portal.
---     4. Login di /login. Akun yang email-nya tidak terdaftar di ADMIN_EMAIL /
---        tidak punya app_metadata.role = 'super_admin' akan ditolak.
+--     2. Pasang role super_admin + daftarkan username:
+--          npm run bootstrap:admin -- admin@email.com superadmin
+--        (script ini menulis app_metadata.role = 'super_admin' dan mengisi
+--         tabel admin_accounts dengan username -> email)
+--        Argumen username OPSIONAL — kalau diisi, admin bisa login memakai
+--        username. Kalau tidak, login tetap memakai email.
+--     3. Isi ADMIN_EMAIL di environment project Vercel pos-amd-admin-portal
+--        (opsional bila sudah pakai app_metadata.role = 'super_admin').
+--     4. Login di /login dengan USERNAME (atau email). Akun yang username-nya
+--        tidak terdaftar di admin_accounts, email-nya tidak ada di ADMIN_EMAIL,
+--        dan tidak punya app_metadata.role = 'super_admin' akan ditolak.
 -- ---------------------------------------------------------------------------

@@ -72,3 +72,24 @@ export const env = {
 export function isSupabaseConfigured(): boolean {
   return Boolean(env.supabaseUrl && env.supabaseAnonKey && !env.supabaseUrl.includes('xxxx'));
 }
+
+/** Pesan yang sama persis di semua tempat — biar mudah dicari di log. */
+export const PESAN_ENV_BELUM_DIISI =
+  'Supabase belum dikonfigurasi di server ini. Isi NEXT_PUBLIC_SUPABASE_URL, ' +
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, dan SUPABASE_SECRET_KEY (service role).';
+
+/**
+ * True hanya bila env Supabase LENGKAP: URL + kunci publik + service role.
+ *
+ * Dipakai sebagai preflight supaya kegagalan konfigurasi dilaporkan sebagai
+ * "belum dikonfigurasi" (503) — bukan disamarkan jadi "email/password salah",
+ * yang akan membuat admin mengira kredensialnya bermasalah padahal server-nya
+ * yang belum diisi.
+ */
+export function isSupabaseFullyConfigured(): boolean {
+  return (
+    isSupabaseConfigured() &&
+    Boolean(env.serviceRoleKey) &&
+    !env.serviceRoleKey.includes('xxxx')
+  );
+}

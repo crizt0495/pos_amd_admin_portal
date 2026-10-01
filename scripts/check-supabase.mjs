@@ -5,8 +5,9 @@
  * Menjalankan 3 hal:
  *  1. Env wajib terisi (URL, publishable key, service role key, ADMIN_EMAIL)
  *  2. Objek database baru sudah ada (view admin_stores/admin_keys,
- *     fungsi admin_topup/admin_topup_bulk/admin_revoke_key, tabel topup_history)
- *  3. Angka ringkas toko & key yang terbaca
+ *     fungsi admin_topup/admin_topup_bulk/admin_revoke_key, tabel topup_history,
+ *     tabel admin_accounts)
+ *  3. Angka ringkas toko & key yang terbaca, plus daftar username admin
  *
  * Jalankan:  npm run check:supabase
  *
@@ -76,6 +77,10 @@ for (const view of ['admin_stores', 'admin_keys']) {
   const { error } = await db.from('topup_history').select('*').limit(1);
   cek('tabel topup_history', !error, error?.message ?? '');
 }
+{
+  const { error } = await db.from('admin_accounts').select('*').limit(1);
+  cek('tabel admin_accounts', !error, error?.message ?? '');
+}
 for (const fn of ['admin_topup', 'admin_topup_bulk', 'admin_revoke_key']) {
   // Panggil dengan argumen sengaja tidak lengkap — harus gagal dengan pesan
   // validasi ("tidak boleh 0" / "wajib diisi"), bukan "function does not exist".
@@ -103,6 +108,20 @@ console.log('\n--- Isi data ---');
     .select('id', { count: 'exact', head: true });
   cek('baca admin_keys', !e2, e2?.message ?? '');
   console.log(`     serial key: ${key ?? 0}`);
+}
+console.log('\n--- Akun admin (login) ---');
+{
+  const { data, error: e3 } = await db
+    .from('admin_accounts')
+    .select('username, email')
+    .order('username');
+  cek('baca admin_accounts', !e3, e3?.message ?? '');
+  if (data?.length) {
+    for (const a of data) console.log(`     ${a.username}  ->  ${a.email}`);
+  } else {
+    console.log('     (belum ada username) — jalankan:');
+    console.log('     npm run bootstrap:admin -- admin@email.com superadmin');
+  }
 }
 
 console.log(

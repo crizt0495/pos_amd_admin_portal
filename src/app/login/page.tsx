@@ -41,6 +41,9 @@ export default async function LoginPage({
           <p className="mt-1 text-[13px] text-zinc-500">
             Masuk sebagai super admin untuk mengelola toko &amp; key.
           </p>
+          <p className="mt-1 text-[12px] text-zinc-400">
+            username atau email super admin
+          </p>
         </div>
 
         <div className="card-soft p-5">
@@ -58,18 +61,20 @@ export default async function LoginPage({
             <input type="hidden" name="next" value={next} />
 
             <div>
-              <label className="field-label" htmlFor="email">
-                Email Admin
+              <label className="field-label" htmlFor="identifier">
+                Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
+                id="identifier"
+                name="identifier"
+                type="text"
                 required
                 autoComplete="username"
                 autoFocus
-                inputMode="email"
-                placeholder="admin@example.com"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="superadmin"
                 className="field-input"
               />
             </div>
@@ -97,8 +102,9 @@ export default async function LoginPage({
         </div>
 
         <p className="mt-5 text-center text-[12px] leading-relaxed text-zinc-500">
-          Hanya akun dengan <code className="rounded bg-zinc-100 px-1 py-0.5">ADMIN_EMAIL</code> atau
-          role <code className="rounded bg-zinc-100 px-1 py-0.5">super_admin</code> yang bisa masuk.
+          Hanya akun dengan username terdaftar di <code className="rounded bg-zinc-100 px-1 py-0.5">admin_accounts</code>, email di{' '}
+          <code className="rounded bg-zinc-100 px-1 py-0.5">ADMIN_EMAIL</code>, atau role{' '}
+          <code className="rounded bg-zinc-100 px-1 py-0.5">super_admin</code> yang bisa masuk.
         </p>
 
         <p className="mt-2 text-center text-[12px] text-zinc-400">{env.appName}</p>

@@ -72,14 +72,21 @@ menampilkan jumlah toko & key.
 ### 2.3 Buat akun super admin
 
 Buat user di **Supabase Dashboard → Authentication → Users → Add user**
-(centang **Auto Confirm User**), lalu naikkan rolenya:
+(centang **Auto Confirm User**), lalu naikkan rolenya dan daftarkan username:
 
 ```bash
-npm run bootstrap:admin -- admin@email.com
+npm run bootstrap:admin -- admin@email.com superadmin
 ```
 
-Alternatifnya, `ADMIN_EMAIL` di `.env.local` sudah cukup sebagai daftar email
-yang boleh login — `app_metadata.role` hanya lapisan kedua.
+Argumen kedua (`superadmin`) adalah **username** untuk login. Aturannya: huruf
+kecil, angka, `.`, `_`, `-`, panjang 3–32 karakter — sama persis dengan CHECK
+constraint di database.
+
+Script itu dua hal: menulis `app_metadata.role = 'super_admin'`, dan menyimpan
+pemetaan `username → email` ke tabel `admin_accounts`.
+
+Admin bisa login dengan **username** maupun email. `ADMIN_EMAIL` jadi opsional
+karena role `super_admin` sudah cukup — env itu cuma daftar email tambahan.
 
 ### 2.4 Jalankan lokal
 
@@ -106,9 +113,19 @@ Variables** (Production + Preview), nilainya sama dengan `.env.local`.
 - `src/lib/supabase/guard.ts` → `requireAdmin()` adalah **satu-satunya** gerbang
   keamanan. Semua page (`src/app/(admin)/*`) dan semua Route Handler
   (`src/app/api/*`) memanggilnya lebih dulu.
-- Login diterima bila email ada di `ADMIN_EMAIL` **atau**
+- Login menerima **username atau email**. Supabase Auth tidak punya kolom
+  username, jadi `POST /api/auth/login` me-resolve `username → email` lewat tabel
+  `admin_accounts` memakai service role **di server** — tidak ada objek yang
+  bisa dibaca anon, sehingga tidak ada permukaan email-enumeration. Resolusi
+  dilakukan sebelum `signInWithPassword`, sehingga Supabase Auth tetap managing
+  password (tidak ada hashing atau session buatan sendiri).
+- Login diterima bila email hasil resolusi ada di `ADMIN_EMAIL` **atau**
   `app_metadata.role === 'super_admin'`. `user_metadata` sengaja tidak dipakai
   karena nilainya bisa diubah sendiri oleh user.
+- Kegagalan diklasifikasi dengan jujur: env belum terisi → `503` dengan pesan
+  konfigurasi; server Supabase tidak bisa dihubungi → `503`; kredensial salah →
+  `401`; bukan admin → `403`. Env kosong **tidak** disamarkan jadi "password
+  salah", karena itu membuat admin salah menyalahkan kredensialnya sendiri.
 - `src/middleware.ts` hanya memeriksa **keberadaan session** lalu mengarahkan ke
   `/login`. Anime ini tidak mengecek role: cookie `@supabase/ssr` di Edge bukan
   JWT payload yang bisa dibaca. Role tetap diverifikasi ulang di server.
@@ -128,7 +145,8 @@ src/components/admin/     sidebar, stat-card, sales-chart, store-manager,
                           key-manager, akun-manager, create-store-form
 src/lib/data.ts           semua query admin (selalu lewat wajibAdmin())
 src/lib/api-guard.ts      wajibAdmin(), jsonOk(), jsonGagal(), bacaJson()
-supabase/admin-schema.sql DDL yang wajib dijalankan sekali
+supabase/admin-schema.sql DDL yang wajib dijalankan sekali (termasuk tabel
+                          admin_accounts untuk login username)
 scripts/                  bootstrap-admin.mjs, check-supabase.mjs
 ```
 

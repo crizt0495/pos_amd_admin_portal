@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /**
- * Pasang role `super_admin` pada satu akun Supabase Auth.
+ * Pasang role `super_admin` pada satu akun Supabase Auth, dan (opsional)
+ * daftarkan USERNAME untuk login.
  *
  * Dipakai SEKALI, setelah akun dibuat lewat Supabase Dashboard:
  *   1. Dashboard > Authentication > Users > Add user
  *      (centang "Auto Confirm User", isi email admin kamu)
  *   2. Jalankan script ini:
- *        npm run bootstrap:admin -- admin@email.com
+ *        npm run bootstrap:admin -- admin@email.com superadmin
+ *
+ * Argumen ke-2 (username) OPSIONAL:
+ *   - diisi  -> username didaftarkan ke tabel `admin_accounts`, jadi admin bisa
+ *               login memakai USERNAME (email tetap boleh dipakai).
+ *   - kosong -> login tetap memakai email saja.
  *
  * Kenapa perlu script? Role disimpan di `app_metadata`, yang HANYA bisa ditulis
  * lewat service role key / dashboard — bukan `user_metadata` yang bisa diisi
@@ -46,6 +52,12 @@ function muatEnvLokal() {
 muatEnvLokal();
 
 const emailArg = process.argv[2]?.trim();
+const usernameArg = process.argv[3]?.trim().toLowerCase() || '';
+
+// Username hanya huruf kecil, angka, titik, underscore, strip; 3-32 karakter.
+// Aturan ini harus sama persis dengan CHECK constraint di tabel admin_accounts.
+const POLA_USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/;
+
 const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const key =
   process.env.SUPABASE_SECRET_KEY ||
@@ -54,7 +66,12 @@ const key =
   '';
 
 if (!emailArg) {
-  console.error('Pemakaian: npm run bootstrap:admin -- admin@email.com');
+  console.error('Pemakaian: npm run bootstrap:admin -- admin@email.com [username]');
+  process.exit(1);
+}
+if (usernameArg && !POLA_USERNAME.test(usernameArg)) {
+  console.error(`Username "${usernameArg}" tidak valid.`);
+  console.error('Aturan: huruf kecil, angka, titik, _ atau -, panjang 3-32 karakter.');
   process.exit(1);
 }
 if (!url || !key) {
@@ -97,4 +114,40 @@ if (errUpdate) {
 }
 
 console.log(`OK — role super_admin dipasang untuk ${emailArg} (user id ${target.id}).`);
-console.log('Sekarang akun ini bisa login di admin portal.');
+
+// --- Opsional: daftarkan username untuk login -------------------------------
+if (usernameArg) {
+  const email = emailArg.toLowerCase();
+
+  // Satu email tidak boleh punya dua username, dan username tidak boleh dipakai
+  // akun lain — jadi hapus dulu baris lama milik email ini kalau ada.
+  const { error: errHapusLama } = await db
+    .from('admin_accounts')
+    .delete()
+    .eq('email', email);
+
+  if (errHapusLama) {
+    console.error('Gagal membersihkan username lama:', errHapusLama.message);
+    process.exit(1);
+  }
+
+  const { error: errSimpan } = await db
+    .from('admin_accounts')
+    .insert({ username: usernameArg, email });
+
+  if (errSimpan) {
+    console.error('Gagal menyimpan username:', errSimpan.message);
+    console.error(
+      'Kalau errornya soal duplikat, berarti username itu sudah dipakai akun lain.',
+    );
+    process.exit(1);
+  }
+
+  console.log(`OK — username "${usernameArg}" didaftarkan untuk ${email}.`);
+}
+
+console.log('');
+console.log('Login di /login memakai:');
+console.log(`  username : ${usernameArg || '(belum didaftarkan — pakai email)'}`);
+console.log(`  email    : ${emailArg}`);
+console.log('  password : password yang kamu set di Supabase Dashboard');
