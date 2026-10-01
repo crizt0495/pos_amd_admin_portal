@@ -25,7 +25,11 @@
 create table if not exists public.topup_history (
   id          uuid primary key default gen_random_uuid(),
   store_id    uuid        not null references public.partners(id) on delete cascade,
-  jumlah      integer     not null check (jumlah > 0),
+  -- `jumlah` SENGAJA tidak dibatasi tanda: nilai negatif = koreksi admin.
+  -- Ditolak/dijepit di dalam RPC admin_topup(), bukan di sini — kalau check
+  -- `jumlah > 0` dipasang, satu koreksi negatif akan menggagalkan seluruh
+  -- transaksi (insert audit ikut gagal), jadi top up koreksi tidak bisa dipakai.
+  jumlah      integer     not null,
   -- sisa kuota SESUDAH penambahan (snapshot, memudahkan audit)
   sisa_quota  integer     not null default 0 check (sisa_quota >= 0),
   admin_by    text,
@@ -36,6 +40,8 @@ create table if not exists public.topup_history (
 -- migrasi aman untuk database lama
 alter table public.topup_history add column if not exists store_id uuid references public.partners(id) on delete cascade;
 alter table public.topup_history add column if not exists jumlah integer;
+-- lepaskan check `jumlah > 0` dari versi schema lama kalau pernah terpasang
+alter table public.topup_history drop constraint if exists topup_history_jumlah_check;
 alter table public.topup_history add column if not exists sisa_quota integer not null default 0;
 alter table public.topup_history add column if not exists admin_by text;
 alter table public.topup_history add column if not exists catatan text;
@@ -183,7 +189,8 @@ begin
   insert into public.topup_history (store_id, jumlah, sisa_quota, admin_by, catatan)
   values (
     p_store_id,
-    case when v_diterapkan = 0 then p_jumlah else v_diterapkan end,
+    -- Catat perubahan YANG BENAR di audit (tidak mengarang agar "positif").
+    v_diterapkan,
     v_baru,
     p_admin_by,
     p_catatan
