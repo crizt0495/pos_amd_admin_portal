@@ -7,18 +7,19 @@
  * diklik, dan dicoba tanpa database apa pun (belum ada env Supabase).
  *
  * Aturan yang tidak bisa ditawar:
- *  - Hanya boleh aktif saat `NODE_ENV !== 'production'`.
+ *  - Mode demo TIDAK BOLEH aktif kalau env Supabase juga terisi. Itu satu-satunya
+ *    kombinasi berbahaya: aplikasi yang kredensial demo-nya aktif tapi masih
+ *    bisa menyentuh database asli. Kombinasi itu membuat build GAGAL dengan
+ *    pesan jelas, jadi tidak bisa lolos diam-diam ke production.
+ *  - Untuk deployment demo, project Vercel/demo tidak diberi env Supabase sama
+ *    sekali — data demo memang tidak butuh database.
  *  - Demo memakai kredensial dummy yang CETAK di halaman login, jadi
- *    membocorkannya tidak berbahaya — TAPI hanya aman karena tidak pernah
- *    boleh nyala di production. Karena itu file ini MEMBUANG DIRI (throw)
- *    begitu `DEMO_MODE=1` bertemu `NODE_ENV=production`, sehingga `next build`
- *    untuk deploy akan GAGAL dengan pesan jelas, bukan diam-diam ter-deploy.
- *  - Tidak ada kode demo yang menyentuh Supabase. Demo memakai cookie sendiri
- *    (`KOOKIE_DEMO`), tidak pernah cookie sesi Supabase, jadi tidak ada jalan
- *    whereby demo session bisa dianggap sesi admin sungguhan.
+ *    membocorkannya tidak berbahaya selama tidak ada database di sebelahnya.
+ *  - Cookie demo (`KOOKIE_DEMO`) terpisah dari cookie sesi Supabase, jadi
+ *    sesi demo tidak akan pernah dianggap sesi admin sungguhan.
  *
  * Mengaktifkan:
- *   cp .env.example .env.local   lalu isi  DEMO_MODE=1
+ *   echo 'DEMO_MODE=1' >> .env.local
  *   npm run dev                  ->  http://localhost:3100
  */
 
@@ -31,10 +32,30 @@ export const KOOKIE_DEMO = 'kp_demo_admin';
 const flag = (process.env.DEMO_MODE ?? '').trim().toLowerCase();
 const aktif = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
 
-if (aktif && process.env.NODE_ENV === 'production') {
+/**
+ * True kalau env Supabase nyata sudah terisi (dianggap nyata kalau bukan
+ * placeholder `xxxx`).
+ *
+ * Sengaja membaca `process.env` langsung, bukan lewat `@/lib/env`, supaya file
+ * ini tidak menarik modul lain — `middleware.ts` (Edge) ikut mengimpornya.
+ */
+function adaEnvSupabase(): boolean {
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim();
+  const secret = (
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SERVICE_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    ''
+  ).trim();
+
+  return Boolean(url) && !url.includes('xxxx') && Boolean(secret) && !secret.includes('xxxx');
+}
+
+if (aktif && adaEnvSupabase()) {
   throw new Error(
-    'DEMO_MODE=1 tidak boleh aktif di NODE_ENV=production. ' +
-      'Hapus DEMO_MODE dari environment project Vercel lalu deploy ulang.',
+    'DEMO_MODE=1 tidak boleh aktif bersamaan dengan env Supabase terisi. ' +
+      'Mode demo memakai data palsu dan tidak butuh database. ' +
+      'Matikan DEMO_MODE, atau kosongkan env Supabase project ini.',
   );
 }
 
