@@ -56,7 +56,10 @@ export function cekPassword(pw: string, wajib = true): string {
 export function cekJumlahKey(nilai: number, min = 1, maks = 10_000): string {
   if (!Number.isFinite(nilai)) return 'Jumlah harus berupa angka.';
   if (!Number.isInteger(nilai)) return 'Jumlah harus bilangan bulat.';
-  if (nilai < min && nilai > -maks) return `Jumlah minimal ${Math.abs(min)} (boleh minus untuk koreksi).`;
+  // Hanya nilai POSITIF yang dibandingkan dengan `min`. Nilai negatif berarti
+  // "koreksi admin" dan memang sah — batasnya sudah `maks` saja, sedangkan
+  // sisa kuota tetap dijepit >= 0 oleh clamp di SQL (dan di data demo).
+  if (nilai > 0 && nilai < min) return `Jumlah minimal ${Math.abs(min)} (boleh minus untuk koreksi).`;
   if (nilai === 0) return 'Jumlah tidak boleh 0.';
   if (Math.abs(nilai) > maks) return `Jumlah maksimal ${maks.toLocaleString('id-ID')}.`;
   return '';
