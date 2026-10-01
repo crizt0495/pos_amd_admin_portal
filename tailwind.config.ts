@@ -47,10 +47,16 @@ const config: Config = {
           from: { opacity: '0', transform: 'translateX(-12px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
+        // Bottom sheet: panel naik dari bawah + fade, ala Material.
+        'sheet-up': {
+          from: { opacity: '0', transform: 'translateY(16px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.25s ease-out both',
         'slide-left': 'slide-left 0.25s ease-out both',
+        'sheet-up': 'sheet-up 0.22s cubic-bezier(0.32, 0.72, 0, 1) both',
       },
     },
   },

@@ -50,37 +50,98 @@
 
 @layer components {
   /* ------------------------------------------------------------------
-     Kerangka admin — ditulis MOBILE FIRST.
+     Kerangka admin — meniru aplikasi Android, bukan situs desktop.
 
-     Base (tanpa prefix) = tampilan HP:
-       - sidebar disembunyikan, digantikan topbar sticky + drawer
-       - konten memakai lebar penuh, tanpa offset sidebar
-     `lg:` = perbaikan bertahap ke desktop: sidebar tetap muncul dan
-     konten digeser 16rem ke kanan.
+     Base (tanpa prefix) = tampilan aplikasi:
+       - topbar sticky di atas (judul + avatar)
+       - konten di tengah, melebar penuh
+       - navigasi DOCKED DI BAWAH (`.app-nav`), bukan sidebar
+     `lg:` hanya menambah kolom di dalam konten; posisinya tetap sama
+     di semua ukuran layar.
 
-     Karena topbar ada di dalam flow (sticky, bukan fixed), tidak perlu
-     padding kompensasi `pt-14` seperti versi lama.
+     Karena topbar dan bottom-nav keduanya ikut flow (sticky, bukan fixed),
+     tidak ada padding kompensasi seperti versi sidebar yang dulu.
      ------------------------------------------------------------------ */
   .admin-shell {
-    @apply flex min-h-[100dvh] w-full bg-zinc-50;
+    @apply flex min-h-[100dvh] w-full flex-col bg-zinc-50;
   }
 
+  /* Kolom konten + navigasi bawah berbagi lebar penuh. */
   .admin-main {
-    @apply flex min-w-0 flex-1 flex-col lg:ml-64;
+    @apply flex min-w-0 flex-1 flex-col;
   }
 
-  /* Topbar HP: menempel di atas saat konten di-scroll. */
+  /* Topbar: menempel di atas saat konten di-scroll, seperti app bar native. */
   .admin-topbar {
-    @apply sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-zinc-200 bg-white/95 px-3 backdrop-blur lg:hidden;
+    @apply sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-zinc-200 bg-white/95 px-3 backdrop-blur;
   }
 
   .admin-content {
     @apply flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7;
   }
 
-  /* Cegah konten tertutup notch/iPhone home-indicator di bagian bawah. */
+  /* Ruang bawah untuk navigasi + cegah home-indicator iPhone. */
   .admin-content-safe {
-    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+
+  /* ------------------------------------------------------------------
+     Navigasi bawah — Material NavigationBar.
+
+     5 slot, tinggi 56px + safe-area, surface elevated di atas konten.
+     ------------------------------------------------------------------ */
+  .app-nav {
+    @apply fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-zinc-200 bg-white/95 backdrop-blur;
+    height: calc(3.5rem + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.04), 0 -4px 16px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Satu slot menu: ikon di atas, label kecil di bawahnya. */
+  .app-nav-item {
+    @apply flex flex-1 flex-col items-center justify-center gap-0.5 text-zinc-500 transition;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app-nav-item-active {
+    @apply text-zinc-900;
+  }
+
+  /* Ikon slot aktif/subtle: Android memakai pill berisi di belakang ikon. */
+  .app-nav-icon {
+    @apply h-[22px] w-[22px];
+  }
+
+  .app-nav-item-active .app-nav-icon {
+    @apply rounded-lg bg-zinc-900 p-[3px] text-white;
+    height: 28px;
+    width: 44px;
+  }
+
+  .app-nav-label {
+    @apply text-[10.5px] leading-none;
+  }
+
+  .app-nav-item-active .app-nav-label {
+    @apply font-bold;
+  }
+
+  /* Avatar di topbar — pemicu sheet akun. */
+  /* Avatar di topbar — pemicu sheet akun.
+     44px supaya memenuhi target sentuh; visualnya tetap bulat 36px
+     lewat border transparan 4px (selaras dengan touch-target). */
+  .app-avatar {
+    @apply grid h-11 w-11 shrink-0 place-items-center rounded-full border-4 border-transparent bg-zinc-900 text-[13px] font-bold text-white transition active:scale-95;
+  }
+
+  /* Backdrop bottom sheet. */
+  .app-sheet-backdrop {
+    @apply fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/50 px-3 pb-3 pt-10 backdrop-blur-[2px];
+  }
+
+  /* Panel sheet: menempel di bawah, naik ke atas (mengikuti Material). */
+  .app-sheet {
+    @apply flex w-full max-w-md animate-sheet-up flex-col rounded-3xl bg-white p-4 shadow-xl;
   }
 
   /* Target sentuh: 44px di HP (WCAG 2.5.5), rapat lagi di desktop. */

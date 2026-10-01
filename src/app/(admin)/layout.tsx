@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { AdminShell } from '@/components/admin/sidebar';
+import { AppShell } from '@/components/admin/app-shell';
 import { ToastProvider } from '@/components/ui/toast';
 import { demoAktif } from '@/lib/demo/config';
 import { requireAdmin } from '@/lib/supabase/guard';
@@ -21,9 +21,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <ToastProvider>
-      <AdminShell email={auth.user.email} demo={demoAktif}>
+      <AppShell email={auth.user.email} demo={demoAktif}>
         {children}
-      </AdminShell>
+      </AppShell>
     </ToastProvider>
   );
 }

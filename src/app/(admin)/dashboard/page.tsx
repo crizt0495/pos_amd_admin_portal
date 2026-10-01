@@ -23,9 +23,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-5">
+      {/* Judul "Dashboard" sudah tampil di app bar. */}
       <header>
-        <h1 className="text-[20px] font-bold text-zinc-900">Dashboard</h1>
-        <p className="mt-0.5 text-[13px] text-zinc-500">
+        <p className="text-[13px] text-zinc-500">
           Ringkasan toko, key, dan komisi — 7 hari terakhir: {totalMingguIni} key ·{' '}
           {rupiah(komisiMingguIni)} komisi.
         </p>
@@ -56,7 +56,8 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/toko"
-            className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-zinc-700 transition hover:text-zinc-900"
+            aria-label="Lihat semua toko"
+            className="inline-flex min-h-11 items-center gap-0.5 rounded-lg pr-2 text-[13px] font-semibold text-zinc-700 transition hover:text-zinc-900 lg:min-h-0"
           >
             Semua toko
             <ChevronRight className="h-4 w-4" />

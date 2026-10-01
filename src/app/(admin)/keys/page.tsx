@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { KeyRound } from 'lucide-react';
 
 import { KeyManager } from '@/components/admin/key-manager';
 import { getKeys } from '@/lib/data';
@@ -25,12 +24,9 @@ export default async function KeysPage() {
 
   return (
     <div className="space-y-4">
+      {/* Judul halaman sudah ada di app bar, jadi di sini cukup ringkasan. */}
       <header>
-        <h1 className="flex items-center gap-2 text-[20px] font-bold text-zinc-900">
-          <KeyRound className="h-5 w-5 text-zinc-500" />
-          Manajemen Serial Key Global
-        </h1>
-        <p className="mt-0.5 text-[13px] text-zinc-500">
+        <p className="text-[13px] text-zinc-500">
           {total} key dari semua toko · {aktifCount} aktif · {belumCount} belum dipakai ·{' '}
           {dicabutCount} dicabut · komisi total {rupiah(komisiTotal)}
         </p>

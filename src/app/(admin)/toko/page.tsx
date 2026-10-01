@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Store as StoreIcon, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
 import { StoreManager } from '@/components/admin/store-manager';
 import { getStores } from '@/lib/data';
@@ -20,15 +20,10 @@ export default async function TokoPage() {
   return (
     <div className="space-y-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-[20px] font-bold text-zinc-900">
-            <StoreIcon className="h-5 w-5 text-zinc-500" />
-            Manajemen Toko
-          </h1>
-          <p className="mt-0.5 text-[13px] text-zinc-500">
-            {stores.length} toko terdaftar · {aktif} aktif · {stores.length - aktif} nonaktif
-          </p>
-        </div>
+        {/* Judul ada di app bar; di sini cukup ringkasan angka. */}
+        <p className="text-[13px] text-zinc-500">
+          {stores.length} toko terdaftar · {aktif} aktif · {stores.length - aktif} nonaktif
+        </p>
         <Link
           href="/toko/baru"
           className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 text-[14px] font-semibold text-white transition active:scale-[0.99]"
