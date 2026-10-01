@@ -25,7 +25,7 @@ const ITEMS = [
   { href: '/akun', label: 'Akun Toko', Icon: Users },
 ] as const;
 
-export function Sidebar({ email }: { email: string }) {
+export function Sidebar({ email, demo = false }: { email: string; demo?: boolean }) {
   const pathname = usePathname();
   const [buka, setBuka] = React.useState(false);
 
@@ -53,6 +53,18 @@ export function Sidebar({ email }: { email: string }) {
           <X className="h-5 w-5" />
         </button>
       </div>
+
+      {/* Badge mode demo — biar tidak pernah tertukar dengan data asli */}
+      {demo ? (
+        <div className="border-b border-amber-500/25 bg-amber-500/10 px-4 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-400">
+            Mode demo
+          </p>
+          <p className="text-[11px] leading-snug text-amber-300/80">
+            Semua data di sini palsu dan tidak menyentuh database.
+          </p>
+        </div>
+      ) : null}
 
       {/* Navigasi utama */}
       <nav className="flex-1 overflow-y-auto px-2.5 py-3" aria-label="Navigasi utama">

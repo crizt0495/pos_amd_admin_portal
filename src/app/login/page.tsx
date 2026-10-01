@@ -49,25 +49,29 @@ export default async function LoginPage({
 
         <div className="card-soft p-5">
           {demoAktif ? (
-          <div
-            className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900"
-            role="note"
-          >
-            <p className="font-semibold">Mode demo — data palsu, tanpa database.</p>
-            <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <dt className="text-amber-700">username</dt>
-              <dd>
-                <code className="rounded bg-white px-1 py-0.5 font-semibold">{DEMO_USERNAME}</code>
-              </dd>
-              <dt className="text-amber-700">password</dt>
-              <dd>
-                <code className="rounded bg-white px-1 py-0.5 font-semibold">{DEMO_PASSWORD}</code>
-              </dd>
-            </dl>
-          </div>
-        ) : null}
+            <div
+              className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900"
+              role="note"
+            >
+              <p className="font-semibold">Mode demo — data palsu, tanpa database.</p>
+              <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                <dt className="text-amber-700">username</dt>
+                <dd>
+                  <code className="rounded bg-white px-1 py-0.5 font-semibold">
+                    {DEMO_USERNAME}
+                  </code>
+                </dd>
+                <dt className="text-amber-700">password</dt>
+                <dd>
+                  <code className="rounded bg-white px-1 py-0.5 font-semibold">
+                    {DEMO_PASSWORD}
+                  </code>
+                </dd>
+              </dl>
+            </div>
+          ) : null}
 
-{sp.error ? (
+          {sp.error ? (
             <div
               className="mb-4 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-[13px] font-medium text-red-700"
               role="alert"
