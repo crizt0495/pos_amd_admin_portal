@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-zinc-50 text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Ring fokus terlihat jelas (aksesibilitas keyboard) */
+  :where(a[href], button, input, select, textarea, [role='button']):focus-visible {
+    outline: 2px solid rgb(24 24 27 / 0.45);
+    outline-offset: 2px;
+  }
+
+  /* Cegah zoom otomatis iOS saat fokus input (< 16px) */
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 16px;
+  }
+
+  /* Sembunyikan number spinner */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* Tombol yang sedang diproses / tidak valid: tak bisa diklik, tampilan redup. */
+  button:disabled {
+    pointer-events: none;
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* Kerangka admin: sidebar tetap di kiri, konten mengalir di kanan.
+     Di layar kecil sidebar berubah jadi drawer (lihat komponen sidebar). */
+  .admin-shell {
+    @apply flex min-h-[100dvh] w-full bg-zinc-50;
+  }
+
+  .admin-main {
+    @apply flex min-w-0 flex-1 flex-col lg:ml-64;
+  }
+
+  .admin-content {
+    @apply flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7;
+  }
+
+  .card-soft {
+    @apply rounded-2xl border border-zinc-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)];
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-[13px] font-medium text-zinc-700;
+  }
+
+  .field-input {
+    @apply h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 text-[15px] text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10;
+  }
+
+  .field-textarea {
+    @apply w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-[15px] leading-relaxed text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10;
+  }
+
+  .input-invalid {
+    @apply !border-red-500 focus:!border-red-500 focus:!ring-red-500/15;
+  }
+
+  .field-error {
+    @apply mt-1 flex items-center gap-1 text-[12px] font-semibold text-red-600;
+  }
+
+  .btn-primary {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 text-[14px] font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-outline {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-[14px] font-semibold text-zinc-800 transition active:scale-[0.99] disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-[14px] font-semibold text-white transition active:scale-[0.99] disabled:opacity-50;
+  }
+
+  /* Tabel data: header rapat, baris bisa di-scroll horizontal di HP. */
+  .table-wrap {
+    @apply w-full overflow-x-auto;
+  }
+
+  .table-head {
+    @apply whitespace-nowrap bg-zinc-50 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wide text-zinc-500;
+  }
+
+  .table-cell {
+    @apply whitespace-nowrap px-3 py-3 text-[13px] text-zinc-700;
+  }
+
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/50 px-4 pb-4 pt-10 backdrop-blur-[2px] sm:items-center;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
