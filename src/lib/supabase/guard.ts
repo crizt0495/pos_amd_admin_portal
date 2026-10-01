@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 
+import { demoAktif, DEMO_EMAIL, KOOKIE_DEMO } from '@/lib/demo/config';
 import { env, isSupabaseFullyConfigured, PESAN_ENV_BELUM_DIISI } from '@/lib/env';
 import { createClient } from '@/lib/supabase/server';
 import type { AdminUser } from '@/types';
@@ -38,6 +40,15 @@ export type AdminAuthResult =
  * role / dashboard, jadi tidak bisa dipalsukan dari sisi pengguna.
  */
 export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
+  // --- Mode demo (lokal saja) ---------------------------------------------
+  // Dicek SEBELUM preflight Supabase: pada mode demo memang tidak ada env
+  // Supabase sama sekali, jadi preflight akan selalu gagal.
+  if (demoAktif) {
+    const ada = (await cookies()).get(KOOKIE_DEMO)?.value === '1';
+    if (!ada) return { ok: false, error: 'Belum login (mode demo).', status: 401 };
+    return { ok: true, user: { userId: 'demo', email: DEMO_EMAIL } };
+  }
+
   // Preflight: env kosong harus muncul sebagai "belum dikonfigurasi" (503),
   // bukan "sesi tidak valid" (401) yang membuat admin mengira sesinya jelek.
   if (!isSupabaseFullyConfigured()) {

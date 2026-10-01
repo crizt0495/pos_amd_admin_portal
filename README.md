@@ -25,6 +25,8 @@ database Supabase yang **SAMA** dengan portal toko.
 
 ## 2. Setup (jalankan berurutan)
 
+> **Mau langsung coba tanpa Supabase?** Loncat ke [ bagian 6](#6-mode-demo-lokal).
+
 ### 2.1 Terapkan SQL
 
 Buka **Supabase Dashboard → SQL Editor**, pastikan project yang dipilih adalah
@@ -152,3 +154,53 @@ scripts/                  bootstrap-admin.mjs, check-supabase.mjs
 
 Tier toko tidak disimpan di database — dihitung dari `total_terjual` lewat fungsi
 SQL `tier_name_of()` pada portal, sehingga tidak bisa tidak sinkron.
+
+---
+
+## 6. Mode demo (lokal)
+
+Supaya aplikasi bisa dibuka dan dicoba **tanpa Supabase sama sekali**:
+
+```bash
+cp .env.example .env.local
+# isi satu baris saja:
+echo 'DEMO_MODE=1' >> .env.local
+
+npm run dev        # http://localhost:3100
+```
+
+| | |
+| --- | --- |
+| username | `demo` |
+| password | `demo1234` |
+
+Kredensial ini juga ditampilkan langsung di halaman `/login` selama mode demo
+aktif, jadi tidak perlu dicatat.
+
+Yang terjadi di mode demo:
+
+- 8 toko + ~95 serial key palsu dibuat di memory (`src/lib/demo/data.ts`).
+  Tier & komisi dihitung pakai `tierOf()` yang sama dengan aslinya.
+- Semua halaman & API tetap bekerja: top up, ubah status key, edit/hapus toko,
+  top up massal, buat toko.
+- Perubahan **benar-benar mengubah angka** (sisa kuota, komisi pending, chart),
+  jadi perilakunya sama dengan produksi — hanya bertahan di memory dan hilang
+  saat `npm run dev` di-restart. `src/lib/demo/data.ts` punya `demoReset()`
+  kalau perlu mengembalikan data ke awal.
+- Balasan API diberi awalan `[DEMO]` supaya tidak pernah tertukar dengan
+  hasil sungguhan.
+
+Yang **tidak** terjadi: tidak ada akun Supabase Auth yang dibuat, tidak ada
+password yang di-reset, dan tidak ada satu pun request yang keluar ke Supabase.
+
+### Pengamanannya
+
+- `src/lib/demo/config.ts` **membuang dirinya** (throw) begitu `DEMO_MODE=1`
+  bertemu `NODE_ENV=production`. Efeknya `npm run build` untuk deploy **gagal
+  dengan pesan jelas** — bukan diam-diam ter-deploy dengan kredensial demo.
+- Sesi demo memakai cookie sendiri (`kp_demo_admin`), tidak pernah cookie sesi
+  Supabase, jadi tidak ada jalur whereby sesi demo bisa dianggap sesi admin
+  sungguhan.
+- `DEMO_MODE` sengaja tidak ada di environment project Vercel.
+- Mode demo bukan pengganti setup produksi: begitu Supabase terhubung, matikan
+  (`DEMO_MODE=1` dihapus) karena data demo tidak ada di database manapun.

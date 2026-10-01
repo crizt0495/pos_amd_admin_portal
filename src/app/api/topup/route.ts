@@ -1,5 +1,7 @@
 import { bacaJson, jsonGagal, jsonOk, wajibAdmin } from '@/lib/api-guard';
 import { cekJumlahKey } from '@/lib/validasi';
+import { demoAktif } from '@/lib/demo/config';
+import { demoTopup } from '@/lib/demo/data';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -33,6 +35,19 @@ export async function POST(req: Request) {
   const jumlah = Number(body.jumlah_key);
   const errJumlah = cekJumlahKey(jumlah);
   if (errJumlah) return jsonGagal(errJumlah);
+
+  // Mode demo: ubah angka di memory, tetap pakai aturan clamp yang sama.
+  if (demoAktif) {
+    const hasil = demoTopup(storeId, Math.trunc(jumlah), (body.catatan ?? '').trim() || null, admin.user.email);
+    if (!hasil.ok) return jsonGagal(hasil.pesan, 404);
+    const terapkan = hasil.jumlah_diterapkan;
+    const catatanTambahan =
+      terapkan !== jumlah ? ` (diminta ${jumlah}, diterapkan ${terapkan} karena sisa tidak boleh negatif)` : '';
+    return jsonOk(
+      `[DEMO] Kuota toko ${terapkan >= 0 ? 'bertambah' : 'berkurang'} ${Math.abs(terapkan)} key. Sisa sekarang ${hasil.sisa_kuota} key${catatanTambahan}.`,
+      { sisa_kuota: hasil.sisa_kuota, jumlah_diterapkan: terapkan },
+    );
+  }
 
   const db = createAdminClient();
   const { data, error } = await db.rpc('admin_topup', {

@@ -1,5 +1,7 @@
 import { bacaJson, jsonGagal, jsonOk, wajibAdmin } from '@/lib/api-guard';
 import { cekJumlahKey } from '@/lib/validasi';
+import { demoAktif } from '@/lib/demo/config';
+import { demoTopupBulk } from '@/lib/demo/data';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TopupResult } from '@/types';
 
@@ -34,11 +36,22 @@ export async function POST(req: Request) {
   const errJumlah = cekJumlahKey(jumlah);
   if (errJumlah) return jsonGagal(errJumlah);
 
+  const catatan = (body.catatan ?? '').trim() || null;
+
+  if (demoAktif) {
+    const hasil = demoTopupBulk(ids, Math.trunc(jumlah), catatan, admin.user.email);
+    const sukses = hasil.filter((r) => r.ok).length;
+    return jsonOk(
+      `[DEMO] Kuota ${jumlah >= 0 ? '+' : ''}${jumlah} key diterapkan ke ${sukses} toko.`,
+      { hasil, sukses, gagal: hasil.length - sukses },
+    );
+  }
+
   const db = createAdminClient();
   const { data, error } = await db.rpc('admin_topup_bulk', {
     p_store_ids: ids,
     p_jumlah: Math.trunc(jumlah),
-    p_catatan: (body.catatan ?? '').trim() || null,
+    p_catatan: catatan,
     p_admin_by: admin.user.email,
   });
 

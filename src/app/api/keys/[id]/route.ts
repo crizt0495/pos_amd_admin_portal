@@ -1,4 +1,6 @@
 import { bacaJson, jsonGagal, jsonOk, wajibAdmin } from '@/lib/api-guard';
+import { demoAktif } from '@/lib/demo/config';
+import { demoSetKeyStatus } from '@/lib/demo/data';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { LicenseStatus } from '@/types';
 
@@ -28,6 +30,19 @@ export async function PATCH(req: Request, { params }: Ctx) {
     return jsonGagal('Status tidak valid.');
   }
 
+  const namaStatus = {
+    unused: 'belum dipakai',
+    active: 'aktif',
+    blocked: 'diblokir',
+    revoked: 'dicabut',
+  }[status];
+
+  if (demoAktif) {
+    const hasil = demoSetKeyStatus(params.id, status);
+    if (!hasil) return jsonGagal('Key tidak ditemukan.', 404);
+    return jsonOk(`[DEMO] Key ${hasil.serial_key} kini ${namaStatus}.`, hasil);
+  }
+
   const db = createAdminClient();
   const { data, error } = await db.rpc('admin_revoke_key', {
     p_key_id: params.id,
@@ -37,12 +52,5 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (error) return jsonGagal(error.message || 'Gagal mengubah status key.', 400);
 
   const hasil = (data?.[0] ?? {}) as { serial_key?: string; status?: string };
-  const namaStatus = {
-    unused: 'belum dipakai',
-    active: 'aktif',
-    blocked: 'diblokir',
-    revoked: 'dicabut',
-  }[status];
-
   return jsonOk(`Key ${hasil.serial_key ?? ''} kini ${namaStatus}.`, hasil);
 }

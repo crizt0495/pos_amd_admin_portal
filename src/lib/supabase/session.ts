@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 
+import { demoAktif, DEMO_EMAIL, KOOKIE_DEMO } from '@/lib/demo/config';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -13,6 +15,12 @@ import { createClient } from '@/lib/supabase/server';
  * memanggil `getUser()` — jadi halaman yang butuh data sensitif aman.
  */
 export const getSessionUser = cache(async (): Promise<{ id: string; email: string } | null> => {
+  // Mode demo: cookie sendiri, tanpa Supabase sama sekali.
+  if (demoAktif) {
+    const ada = (await cookies()).get(KOOKIE_DEMO)?.value === '1';
+    return ada ? { id: 'demo', email: DEMO_EMAIL } : null;
+  }
+
   const supabase = createClient();
 
   const {

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { cekKredensialDemo, demoAktif, DEMO_EMAIL, KOOKIE_DEMO } from '@/lib/demo/config';
 import { env, isSupabaseFullyConfigured, PESAN_ENV_BELUM_DIISI } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -112,6 +113,42 @@ export async function POST(req: NextRequest) {
   if (!identifier || !password) {
     const message = 'Username dan password wajib diisi.';
     return viaForm ? formError(req, message) : json({ ok: false, message }, 400);
+  }
+
+  // --- Mode demo (lokal saja) ----------------------------------------------
+  // Dicek sebelum Supabase: pada mode demo tidak ada env Supabase sama sekali.
+  if (demoAktif) {
+    if (!cekKredensialDemo(identifier, password)) {
+      return viaForm
+        ? formError(req, PESAN_SALAH)
+        : json({ ok: false, message: PESAN_SALAH }, 401);
+    }
+
+    if (viaForm) {
+      const url = req.nextUrl.clone();
+      url.pathname = next;
+      url.search = '';
+      const res = NextResponse.redirect(url, 303);
+      res.cookies.set(KOOKIE_DEMO, '1', {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 8,
+      });
+      return res;
+    }
+
+    const res = NextResponse.json(
+      { ok: true, message: 'Berhasil login (mode demo).', email: DEMO_EMAIL },
+      { status: 200 },
+    );
+    res.cookies.set(KOOKIE_DEMO, '1', {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 8,
+    });
+    return res;
   }
 
   // --- Preflight konfigurasi -----------------------------------------------

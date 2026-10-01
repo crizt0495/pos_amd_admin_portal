@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { bacaJson, jsonGagal, jsonOk, wajibAdmin } from '@/lib/api-guard';
 import { cekPassword } from '@/lib/validasi';
+import { demoAktif } from '@/lib/demo/config';
+import { demoCariStore } from '@/lib/demo/data';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
@@ -35,6 +37,13 @@ export async function POST(req: Request) {
       { ok: false, message: errPw, errors: { password_baru: errPw } },
       { status: 422 },
     );
+  }
+
+  // Mode demo: tidak ada auth user sungguhan, jadi hanya konfirmasi.
+  if (demoAktif) {
+    const toko = demoCariStore(storeId);
+    if (!toko) return jsonGagal('Toko tidak ditemukan.', 404);
+    return jsonOk(`[DEMO] Password akun ${toko.email ?? toko.nama_toko} "di-reset" (tidak ada efek nyata).`);
   }
 
   const db = createAdminClient();

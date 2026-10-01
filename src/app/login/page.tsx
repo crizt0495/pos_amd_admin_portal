@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { AlertCircle, LogIn, ShieldCheck } from 'lucide-react';
 
 import { env } from '@/lib/env';
+import { DEMO_PASSWORD, DEMO_USERNAME, demoAktif } from '@/lib/demo/config';
 import { getSessionUser } from '@/lib/supabase/session';
 
 /**
@@ -47,7 +48,26 @@ export default async function LoginPage({
         </div>
 
         <div className="card-soft p-5">
-          {sp.error ? (
+          {demoAktif ? (
+          <div
+            className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900"
+            role="note"
+          >
+            <p className="font-semibold">Mode demo — data palsu, tanpa database.</p>
+            <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+              <dt className="text-amber-700">username</dt>
+              <dd>
+                <code className="rounded bg-white px-1 py-0.5 font-semibold">{DEMO_USERNAME}</code>
+              </dd>
+              <dt className="text-amber-700">password</dt>
+              <dd>
+                <code className="rounded bg-white px-1 py-0.5 font-semibold">{DEMO_PASSWORD}</code>
+              </dd>
+            </dl>
+          </div>
+        ) : null}
+
+{sp.error ? (
             <div
               className="mb-4 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-[13px] font-medium text-red-700"
               role="alert"
@@ -102,9 +122,20 @@ export default async function LoginPage({
         </div>
 
         <p className="mt-5 text-center text-[12px] leading-relaxed text-zinc-500">
-          Hanya akun dengan username terdaftar di <code className="rounded bg-zinc-100 px-1 py-0.5">admin_accounts</code>, email di{' '}
-          <code className="rounded bg-zinc-100 px-1 py-0.5">ADMIN_EMAIL</code>, atau role{' '}
-          <code className="rounded bg-zinc-100 px-1 py-0.5">super_admin</code> yang bisa masuk.
+          {demoAktif ? (
+            <>
+              Data di bawah ini <strong>palsu</strong> dan kembali ke awal setiap{' '}
+              <code className="rounded bg-zinc-100 px-1 py-0.5">npm run dev</code> di-restart. Tidak
+              ada yang tersimpan ke database.
+            </>
+          ) : (
+            <>
+              Hanya akun dengan username terdaftar di{' '}
+              <code className="rounded bg-zinc-100 px-1 py-0.5">admin_accounts</code>, email di{' '}
+              <code className="rounded bg-zinc-100 px-1 py-0.5">ADMIN_EMAIL</code>, atau role{' '}
+              <code className="rounded bg-zinc-100 px-1 py-0.5">super_admin</code> yang bisa masuk.
+            </>
+          )}
         </p>
 
         <p className="mt-2 text-center text-[12px] text-zinc-400">{env.appName}</p>

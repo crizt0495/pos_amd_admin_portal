@@ -2,6 +2,15 @@ import 'server-only';
 
 import { cache } from 'react';
 
+import {
+  demoCariStore,
+  demoDashboard,
+  demoKeys,
+  demoKeysToko,
+  demoStores,
+  demoTopupsToko,
+} from '@/lib/demo/data';
+import { demoAktif } from '@/lib/demo/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/supabase/guard';
 import { hariSingkat, tanggalPendek } from '@/lib/format';
@@ -41,6 +50,10 @@ export const getDashboard = cache(async (): Promise<{
   sales: SalesPoint[];
 }> => {
   await wajibAdmin();
+
+  // Mode demo: data in-memory, tanpa Supabase.
+  if (demoAktif) return demoDashboard();
+
   const db = createAdminClient();
 
   // 4 angka utama. Count/aggregate di DB, bukan ambil semua baris ke memory.
@@ -121,6 +134,9 @@ export const getDashboard = cache(async (): Promise<{
 
 export const getStores = cache(async (limit = 500): Promise<Store[]> => {
   await wajibAdmin();
+
+  if (demoAktif) return demoStores().slice(0, limit);
+
   const db = createAdminClient();
 
   const { data, error } = await db
@@ -140,6 +156,15 @@ export const getStoreDetail = cache(async (id: string): Promise<{
   topups: TopupHistory[];
 }> => {
   await wajibAdmin();
+
+  if (demoAktif) {
+    return {
+      store: demoCariStore(id),
+      keys: demoKeysToko(id),
+      topups: demoTopupsToko(id),
+    };
+  }
+
   const db = createAdminClient();
 
   const [store, keys, topups] = await Promise.all([
@@ -172,6 +197,12 @@ export const getStoreDetail = cache(async (id: string): Promise<{
 export const getKeys = cache(
   async (limit = 500): Promise<{ keys: Key[]; total: number }> => {
     await wajibAdmin();
+
+    if (demoAktif) {
+      const semua = demoKeys();
+      return { keys: semua.slice(0, limit), total: semua.length };
+    }
+
     const db = createAdminClient();
 
     const { data, error, count } = await db

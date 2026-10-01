@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+import { demoAktif, KOOKIE_DEMO } from '@/lib/demo/config';
 import { env } from '@/lib/env';
 
 /**
@@ -33,6 +34,30 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   let response = NextResponse.next({ request: { headers: req.headers } });
+
+  // --- Mode demo: tanpa Supabase sama sekali -------------------------------
+  // Cookie demo dicek langsung; tidak ada panggilan jaringan. Penegasan role
+  // tetap di guard.ts (server) — middleware cuma lapisan UX, sama seperti
+  // jalur produksi.
+  if (demoAktif) {
+    const sudahLogin = req.cookies.get(KOOKIE_DEMO)?.value === '1';
+
+    if (!sudahLogin && terProteksi(pathname)) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/login';
+      url.search = `?next=${encodeURIComponent(pathname)}`;
+      return NextResponse.redirect(url);
+    }
+
+    if (sudahLogin && PUBLIK.includes(pathname)) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/dashboard';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+
+    return response;
+  }
 
   const supabase = createServerClient(
     env.supabaseUrl,

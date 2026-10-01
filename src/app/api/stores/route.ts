@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { bacaJson, jsonGagal, jsonOk, wajibAdmin } from '@/lib/api-guard';
 import { cekAlamat, cekEmail, cekPassword, cekTelepon, hanyaDigit, namaValid } from '@/lib/validasi';
+import { demoAktif } from '@/lib/demo/config';
+import { demoBuatStore, demoStores } from '@/lib/demo/data';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { tierOf } from '@/lib/tier';
 
@@ -72,6 +74,34 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { ok: false, message: 'Periksa kembali data yang diisi.', errors },
       { status: 422 },
+    );
+  }
+
+  // Mode demo: cek email dipakai di memory, lalu buat toko baru.
+  if (demoAktif) {
+    const bentrok = demoStores().find((s) => (s.email ?? '').toLowerCase() === email);
+    if (bentrok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: `Email ${email} sudah dipakai toko "${bentrok.nama_toko}".`,
+          errors: { email: 'Email sudah terdaftar.' },
+        },
+        { status: 409 },
+      );
+    }
+    const s = demoBuatStore({
+      nama_toko: namaToko,
+      email,
+      username: (body.username ?? '').trim() || email.split('@')[0]!,
+      no_hp: noHp,
+      alamat,
+      kuota_awal: kuotaAwal,
+    });
+    return jsonOk(
+      `[DEMO] Toko "${s.nama_toko}" dibuat dengan sisa kuota ${s.sisa_kuota} key. Tidak ada akun auth yang dibuat.`,
+      { user_id: s.user_id, tier: tierOf(0).name },
+      201,
     );
   }
 
