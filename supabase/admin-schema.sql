@@ -309,9 +309,19 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- 9. RLS & Grants
---    Semua akses admin lewat SERVICE ROLE key dari Route Handler, jadi objek
---    baru di bawah TIDAK diberi policy untuk anon/authenticated — RLS aktif
---    tanpa policy = tolak semua (paling aman kalau kunci service role bocor).
+--    PENTING — RLS TIDAK menyelamatkan objek di bawah:
+--      - Fungsi admin_* dibuat SECURITY DEFINER, jadi berjalan sebagai owner dan
+--        policy RLS TIDAK berlaku. Satu-satunya pagar adalah revoke EXECUTE.
+--      - View tanpa `security_invoker` juga dibaca dengan hak owner, sehingga RLS
+--        tabel dasar (partners/licenses) ikut dilewati.
+--    Supabase memberi grant default pada objek baru di schema public (SELECT dan
+--    EXECUTE ke anon/authenticated). Jadi WAJIB dicabut eksplisit — tanpa itu
+--    siapa pun yang punya publishable key bisa:
+--      1. baca admin_stores       -> UUID toko, email, no HP, alamat
+--      2. panggil admin_topup(uuid, 999999) -> kuota tak terbatas
+--      3. panggil admin_revoke_key(uuid)    -> matikan serial key pelanggan
+--
+--    Akses resmi hanya lewat SERVICE ROLE key dari Route Handler.
 -- ---------------------------------------------------------------------------
 alter table public.topup_history enable row level security;
 alter table public.admin_accounts enable row level security;
@@ -320,17 +330,34 @@ drop policy if exists "topup_history_admin_all" on public.topup_history;
 drop policy if exists "admin_accounts_admin_all" on public.admin_accounts;
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select, insert, update, delete on public.topup_history to service_role;
+
+-- --- Tabel: cabut semua dari anon/authenticated, hanya service_role ---
+revoke all on public.topup_history from anon, authenticated;
+revoke all on public.admin_accounts from anon, authenticated;
+grant select, insert, update, delete on public.topup_history  to service_role;
 grant select, insert, update, delete on public.admin_accounts to service_role;
 grant usage, select on all sequences in schema public to service_role;
 
--- View dieksekusi dengan hak PEMAKAI yang memanggil, jadi grant eksplisit wajib.
+-- --- View: cabut dari anon/authenticated, hanya service_role ---
+revoke all on public.admin_stores from anon, authenticated;
+revoke all on public.admin_keys   from anon, authenticated;
 grant select on public.admin_stores to service_role;
 grant select on public.admin_keys   to service_role;
 
+-- --- Fungsi: cabut EXECUTE dari anon/authenticated/public ---
+-- PENTING: `revoke ... from public` saja TIDAK cukup. Supabase memasang
+-- `alter default privileges ... grant all on functions to postgres, anon,
+-- authenticated, service_role`, jadi EXECUTE itu grant EKSPLISIT ke tiap role —
+-- revoke dari public tidak menyentuhnya. Harus dicabut per role.
+revoke all on function public.admin_topup(uuid, integer, text, text)       from anon, authenticated, public;
+revoke all on function public.admin_topup_bulk(uuid[], integer, text, text) from anon, authenticated, public;
+revoke all on function public.admin_revoke_key(uuid, text)                 from anon, authenticated, public;
 grant execute on function public.admin_topup(uuid, integer, text, text)      to service_role;
 grant execute on function public.admin_topup_bulk(uuid[], integer, text, text) to service_role;
 grant execute on function public.admin_revoke_key(uuid, text)                to service_role;
+
+-- Cegah objek admin berikutnya otomatis dapat grant default yang sama.
+alter default privileges in schema public revoke execute on functions from public;
 
 -- ---------------------------------------------------------------------------
 -- 10. SETUP ADMIN
