@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, History, KeyRound, MapPin, Phone, Store as StoreIcon, Wallet } from 'lucide-react';
 
 import { KeyStatusBadge, KuotaBadge, StoreStatusBadge, TierBadge } from '@/components/ui/badge';
-import { EmptyState, TableWrap, Td, Th } from '@/components/ui/table';
+import { EmptyState, TableCards, TableWrap, CardBadges, CardField, CardHeader, CardItem, Td, Th } from '@/components/ui/table';
 import { TopupStoreButton } from '@/components/admin/topup-store-button';
 import { getStoreDetail } from '@/lib/data';
 import { angka, rupiah, sejak, tanggalWaktu } from '@/lib/format';
@@ -119,8 +119,9 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
             />
           </div>
         ) : (
-          <TableWrap>
-            <table className="w-full min-w-[760px] border-collapse">
+          <>
+            {/* Desktop: tabel penuh */}
+            <TableWrap>
               <thead>
                 <tr>
                   <Th>Serial Key</Th>
@@ -151,8 +152,34 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </TableWrap>
+            </TableWrap>
+
+            {/* HP: kartu satu per key */}
+            <TableCards>
+              {keys.map((k) => (
+                <CardItem key={k.id}>
+                  <CardHeader
+                    title={<span className="font-mono">{k.serial_key}</span>}
+                    subtitle={tanggalWaktu(k.created_at)}
+                  />
+                  <div className="mt-2.5 space-y-1">
+                    <CardField label="Pembeli">{k.nama_pembeli}</CardField>
+                    <CardField label="Telepon">
+                      <span className="tabular">{k.telepon ?? '-'}</span>
+                    </CardField>
+                    <CardField label="Paket">{PAKET_LABEL[k.paket]}</CardField>
+                    <CardField label="Pilihan">{LICENSE_TYPE_LABEL[k.pilihan]}</CardField>
+                    <CardField label="Komisi">
+                      <span className="tabular">{rupiah(k.komisi)}</span>
+                    </CardField>
+                  </div>
+                  <CardBadges>
+                    <KeyStatusBadge status={k.status} />
+                  </CardBadges>
+                </CardItem>
+              ))}
+            </TableCards>
+          </>
         )}
       </section>
 

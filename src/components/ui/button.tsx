@@ -8,16 +8,22 @@ import { cn } from '@/lib/utils';
 type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'xs';
 
+/**
+ * Ukuran tombol.
+ *
+ * Mobile first: tinggi base adalah target sentuh 44px (WCAG 2.5.5), lalu
+ * dikecilkan ke `lg:` di desktop agar tabel tetap padat.
+ */
 const VARIANT: Record<ButtonVariant, string> = {
   primary: 'btn-primary',
   outline: 'btn-outline',
   danger: 'btn-danger',
-  ghost: 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold text-zinc-600 transition hover:bg-zinc-100 active:scale-[0.99] disabled:opacity-50',
+  ghost: 'inline-flex h-11 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold text-zinc-600 transition hover:bg-zinc-100 active:scale-[0.99] disabled:opacity-50 lg:h-9',
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  xs: 'h-8 px-2.5 text-[12px]',
-  sm: 'h-9 px-3 text-[13px]',
+  xs: 'h-11 px-2.5 text-[12px] lg:h-8',
+  sm: 'h-11 px-3 text-[13px] lg:h-9',
   md: 'h-11',
 };
 
@@ -46,7 +52,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
   );
 });
 
-/** Tombol ikon saja (untuk aksi di dalam tabel). Wajib punya `aria-label`. */
+/**
+ * Tombol ikon saja (untuk aksi di dalam tabel & kartu). Wajib punya `aria-label`.
+ * Base 44px untuk jari di HP, `lg:` kembali 36px supaya baris tabel tetap rapat.
+ */
 export const IconButton = React.forwardRef<
   HTMLButtonElement,
   ButtonProps & { label: string }
@@ -58,7 +67,7 @@ export const IconButton = React.forwardRef<
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.97] disabled:opacity-50',
+        'inline-flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.97] disabled:opacity-50 lg:h-9 lg:w-9',
         className,
       )}
       {...rest}

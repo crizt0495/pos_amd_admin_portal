@@ -59,7 +59,7 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 aria-label="Tutup"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100"
+                className="touch-target -mr-2 rounded-lg text-zinc-500 transition hover:bg-zinc-100"
               >
                 <X className="h-4 w-4" />
               </button>

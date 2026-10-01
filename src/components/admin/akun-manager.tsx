@@ -9,7 +9,19 @@ import { Button, IconButton } from '@/components/ui/button';
 import { KuotaBadge, StoreStatusBadge, TierBadge } from '@/components/ui/badge';
 import { Field, Input } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
-import { AlertBox, EmptyState, TableWrap, Td, Th } from '@/components/ui/table';
+import {
+  AlertBox,
+  CardActions,
+  CardBadges,
+  CardField,
+  CardHeader,
+  CardItem,
+  EmptyState,
+  TableCards,
+  TableWrap,
+  Td,
+  Th,
+} from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { cekJumlahKey, cekPassword } from '@/lib/validasi';
 import { rupiah, sejak } from '@/lib/format';
@@ -67,6 +79,55 @@ export function AkunManager({ stores }: { stores: Store[] }) {
     );
   }
 
+  /** Aksi akun toko — dipakai baris tabel (desktop) & kartu (HP). */
+  function aksiAkun(s: Store) {
+    return (
+      <>
+        <IconButton
+          label={`Top up ${s.nama_toko}`}
+          onClick={() => setDialog({ kind: 'topup', store: s })}
+        >
+          <KeyRound className="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          label={`Reset password ${s.nama_toko}`}
+          onClick={() => setDialog({ kind: 'reset-pw', store: s })}
+        >
+          <UserCog className="h-4 w-4" />
+        </IconButton>
+      </>
+    );
+  }
+
+  /**
+   * Checkbox akun toko — area sentuh 44px lewat pembungkus `<label>`,
+   * sementara kotak centangnya tetap 20px supaya tidak memenuhi kartu.
+   */
+  const checkbox = (s: Store) => (
+    <label className="-m-2 grid h-11 w-11 cursor-pointer place-items-center">
+      <input
+        type="checkbox"
+        checked={dipilih.has(s.id)}
+        onChange={() => togglePilih(s.id)}
+        aria-label={`Pilih ${s.nama_toko}`}
+        className="h-5 w-5 rounded border-zinc-300 accent-zinc-900"
+      />
+    </label>
+  );
+
+  /** Checkbox "pilih semua" di header tabel. */
+  const checkboxSemua = (
+    <label className="-mx-3 -my-2.5 grid h-11 w-11 cursor-pointer place-items-center">
+      <input
+        type="checkbox"
+        checked={semuaTerpilih}
+        onChange={toggleSemua}
+        aria-label="Pilih semua akun"
+        className="h-5 w-5 rounded border-zinc-300 accent-zinc-900"
+      />
+    </label>
+  );
+
   return (
     <>
       <div className="mb-3 flex flex-col gap-2.5 sm:flex-row sm:items-center">
@@ -107,7 +168,7 @@ export function AkunManager({ stores }: { stores: Store[] }) {
           action={
             <Link
               href="/toko/baru"
-              className="inline-flex h-9 items-center rounded-lg bg-zinc-900 px-3 text-[13px] font-semibold text-white"
+              className="inline-flex h-11 items-center rounded-lg bg-zinc-900 px-3 text-[13px] font-semibold text-white lg:h-9"
             >
               Daftar Toko Baru
             </Link>
@@ -117,15 +178,7 @@ export function AkunManager({ stores }: { stores: Store[] }) {
         <TableWrap>
           <thead>
             <tr>
-              <Th className="w-9">
-                <input
-                  type="checkbox"
-                  checked={semuaTerpilih}
-                  onChange={toggleSemua}
-                  aria-label="Pilih semua akun"
-                  className="h-4 w-4 rounded border-zinc-300 accent-zinc-900"
-                />
-              </Th>
+              <Th className="w-9">{checkboxSemua}</Th>
               <Th>Nama Toko</Th>
               <Th>Email Login</Th>
               <Th>Username</Th>
@@ -140,15 +193,7 @@ export function AkunManager({ stores }: { stores: Store[] }) {
           <tbody className="divide-y divide-zinc-100">
             {terfilter.map((s) => (
               <tr key={s.id} className="transition hover:bg-zinc-50/70">
-                <Td>
-                  <input
-                    type="checkbox"
-                    checked={dipilih.has(s.id)}
-                    onChange={() => togglePilih(s.id)}
-                    aria-label={`Pilih ${s.nama_toko}`}
-                    className="h-4 w-4 rounded border-zinc-300 accent-zinc-900"
-                  />
-                </Td>
+                <Td>{checkbox(s)}</Td>
                 <Td>
                   <Link
                     href={`/toko/${s.id}`}
@@ -172,26 +217,50 @@ export function AkunManager({ stores }: { stores: Store[] }) {
                   <StoreStatusBadge aktif={s.is_active} />
                 </Td>
                 <Td>
-                  <div className="flex items-center justify-end gap-1">
-                    <IconButton
-                      label={`Top up ${s.nama_toko}`}
-                      onClick={() => setDialog({ kind: 'topup', store: s })}
-                    >
-                      <KeyRound className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton
-                      label={`Reset password ${s.nama_toko}`}
-                      onClick={() => setDialog({ kind: 'reset-pw', store: s })}
-                    >
-                      <UserCog className="h-4 w-4" />
-                    </IconButton>
-                  </div>
+                  <div className="flex items-center justify-end gap-1">{aksiAkun(s)}</div>
                 </Td>
               </tr>
             ))}
           </tbody>
         </TableWrap>
       )}
+
+      {/* Tampilan HP: kartu satu per akun — tanpa scroll horizontal. */}
+      {terfilter.length > 0 ? (
+        <TableCards>
+          {terfilter.map((s) => (
+            <CardItem key={s.id}>
+              <CardHeader
+                right={checkbox(s)}
+                title={
+                  <Link href={`/toko/${s.id}`} className="underline-offset-2 hover:underline">
+                    {s.nama_toko}
+                  </Link>
+                }
+                subtitle={`daftar ${sejak(s.created_at)}`}
+              />
+              <div className="mt-2.5 space-y-1">
+                <CardField label="Email">{s.email ?? '-'}</CardField>
+                <CardField label="Username">{s.username ?? '-'}</CardField>
+                <CardField label="Terjual">
+                  <span className="tabular">{s.total_terjual}</span>
+                </CardField>
+                <CardField label="Sisa kuota">
+                  <KuotaBadge sisa={s.sisa_kuota} />
+                </CardField>
+                <CardField label="Komisi">
+                  <span className="tabular">{rupiah(s.komisi_total)}</span>
+                </CardField>
+              </div>
+              <CardBadges>
+                <TierBadge tier={s.tier} />
+                <StoreStatusBadge aktif={s.is_active} />
+              </CardBadges>
+              <CardActions>{aksiAkun(s)}</CardActions>
+            </CardItem>
+          ))}
+        </TableCards>
+      ) : null}
 
       {/* Warning: toko tanpa akun auth */}
       {tanpaAkun.length > 0 ? (

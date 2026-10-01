@@ -8,7 +8,19 @@ import { Button, IconButton } from '@/components/ui/button';
 import { KeyStatusBadge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
-import { AlertBox, EmptyState, TableWrap, Td, Th } from '@/components/ui/table';
+import {
+  AlertBox,
+  CardActions,
+  CardBadges,
+  CardField,
+  CardHeader,
+  CardItem,
+  EmptyState,
+  TableCards,
+  TableWrap,
+  Td,
+  Th,
+} from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { rupiah, tanggalWaktu } from '@/lib/format';
 import { LICENSE_TYPE_LABEL, PAKET_LABEL } from '@/lib/tier';
@@ -89,6 +101,62 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
     }
   }
 
+  /** Aksi status satu key — dipakai baris tabel (desktop) & kartu (HP). */
+  function aksiKey(k: Key) {
+    if (k.status === 'revoked') {
+      return (
+        <IconButton
+          label={`Aktifkan kembali ${k.serial_key}`}
+          onClick={() => ubahStatus(k, 'unused')}
+          disabled={busy}
+          className="border-emerald-200 text-emerald-700"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+        </IconButton>
+      );
+    }
+    return (
+      <>
+        {k.status === 'active' ? (
+          <IconButton
+            label={`Blokir ${k.serial_key}`}
+            onClick={() => setKonfirmasi({ ...k, status: 'blocked' })}
+            disabled={busy}
+            className="border-amber-200 text-amber-700"
+          >
+            <ShieldAlert className="h-4 w-4" />
+          </IconButton>
+        ) : null}
+        <IconButton
+          label={`Cabut ${k.serial_key}`}
+          onClick={() => setKonfirmasi({ ...k, status: 'revoked' })}
+          disabled={busy}
+          className="border-red-200 text-red-600"
+        >
+          <Ban className="h-4 w-4" />
+        </IconButton>
+      </>
+    );
+  }
+
+  /** Serial key + tombol salin, dipakai tabel & kartu. */
+  function selKey(k: Key) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono text-[12px] font-semibold text-zinc-900">
+          {k.serial_key}
+        </span>
+        <IconButton
+          label={`Salin ${k.serial_key}`}
+          onClick={() => salin(k.serial_key)}
+          className="border-transparent lg:h-7 lg:w-7"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </IconButton>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Toolbar */}
@@ -109,7 +177,7 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
               key={f.nilai}
               type="button"
               onClick={() => setStatus(f.nilai)}
-              className={`h-9 rounded-lg px-3 text-[12.5px] font-semibold transition ${
+              className={`touch-chip ${
                 status === f.nilai
                   ? 'bg-zinc-900 text-white'
                   : 'border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
@@ -174,18 +242,7 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
             {terfilter.map((k) => (
               <tr key={k.id} className="transition hover:bg-zinc-50/70">
                 <Td>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[12px] font-semibold text-zinc-900">
-                      {k.serial_key}
-                    </span>
-                    <IconButton
-                      label={`Salin ${k.serial_key}`}
-                      onClick={() => salin(k.serial_key)}
-                      className="h-7 w-7 border-transparent"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </IconButton>
-                  </div>
+                  {selKey(k)}
                   {k.hwid_locked ? (
                     <p className="mt-0.5 text-[10.5px] text-zinc-400" title={k.hwid_locked}>
                       terkunci ke {k.device_name ?? 'perangkat'}
@@ -207,45 +264,52 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
                   <KeyStatusBadge status={k.status} />
                 </Td>
                 <Td>
-                  <div className="flex items-center justify-end gap-1">
-                    {k.status === 'revoked' ? (
-                      <IconButton
-                        label={`Aktifkan kembali ${k.serial_key}`}
-                        onClick={() => ubahStatus(k, 'unused')}
-                        disabled={busy}
-                        className="border-emerald-200 text-emerald-700"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </IconButton>
-                    ) : (
-                      <>
-                        {k.status === 'active' ? (
-                          <IconButton
-                            label={`Blokir ${k.serial_key}`}
-                            onClick={() => setKonfirmasi({ ...k, status: 'blocked' })}
-                            disabled={busy}
-                            className="border-amber-200 text-amber-700"
-                          >
-                            <ShieldAlert className="h-4 w-4" />
-                          </IconButton>
-                        ) : null}
-                        <IconButton
-                          label={`Cabut ${k.serial_key}`}
-                          onClick={() => setKonfirmasi({ ...k, status: 'revoked' })}
-                          disabled={busy}
-                          className="border-red-200 text-red-600"
-                        >
-                          <Ban className="h-4 w-4" />
-                        </IconButton>
-                      </>
-                    )}
-                  </div>
+                  <div className="flex items-center justify-end gap-1">{aksiKey(k)}</div>
                 </Td>
               </tr>
             ))}
           </tbody>
         </TableWrap>
       )}
+
+      {/* Tampilan HP: kartu satu per key — tanpa scroll horizontal. */}
+      {terfilter.length > 0 ? (
+        <TableCards>
+          {terfilter.map((k) => (
+            <CardItem key={k.id}>
+              <CardHeader
+                title={<span className="font-mono">{k.serial_key}</span>}
+                subtitle={
+                  k.hwid_locked
+                    ? `terkunci ke ${k.device_name ?? 'perangkat'}`
+                    : tanggalWaktu(k.created_at)
+                }
+              />
+              <div className="mt-2.5 space-y-1">
+                <CardField label="Pembeli">{k.nama_pembeli}</CardField>
+                {k.telepon ? (
+                  <CardField label="Telepon">
+                    <span className="tabular">{k.telepon}</span>
+                  </CardField>
+                ) : null}
+                <CardField label="Toko">{k.nama_toko ?? '-'}</CardField>
+                <CardField label="Paket">{PAKET_LABEL[k.paket]}</CardField>
+                <CardField label="Pilihan">{LICENSE_TYPE_LABEL[k.pilihan]}</CardField>
+                <CardField label="Komisi">
+                  <span className="tabular">{rupiah(k.komisi)}</span>
+                </CardField>
+              </div>
+              <CardBadges>
+                <KeyStatusBadge status={k.status} />
+              </CardBadges>
+              <CardActions>
+                {selKey(k)}
+                {aksiKey(k)}
+              </CardActions>
+            </CardItem>
+          ))}
+        </TableCards>
+      ) : null}
 
       {/* Konfirmasi revoke / blokir */}
       <Modal

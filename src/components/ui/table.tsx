@@ -5,11 +5,85 @@ import { AlertTriangle, Inbox, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
-/** Pembungkus tabel: bikin scroll horizontal + bolehkan sticky header. */
+/**
+ * Pembungkus tabel — HANYA tampil di layar besar (`lg:` ke atas).
+ *
+ * Di layar kecil tabel ini disembunyikan dan diganti `TableCards`, jadi
+ * pengguna HP tidak pernah perlu scroll horizontal.
+ */
 export function TableWrap({ children }: { children: React.ReactNode }) {
   return (
     <div className="table-wrap rounded-2xl border border-zinc-200/80 bg-white">
       <table className="w-full min-w-[720px] border-collapse">{children}</table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Padanan tabel untuk layar kecil — daftar kartu                     */
+/* ------------------------------------------------------------------ */
+
+/** Wadah daftar kartu. Pasangan `TableWrap` untuk tampilan HP. */
+export function TableCards({ children }: { children: React.ReactNode }) {
+  return <ul className="card-list">{children}</ul>;
+}
+
+/** Satu kartu = satu baris tabel. */
+export function CardItem({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <li className={cn('card-soft p-3.5', className)}>{children}</li>;
+}
+
+/** Judul kartu + slot kanan untuk badge/sCheckbox. */
+export function CardHeader({
+  title,
+  subtitle,
+  right,
+}: {
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      {right ? <div className="pt-0.5">{right}</div> : null}
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-bold leading-snug text-zinc-900">{title}</p>
+        {subtitle ? (
+          <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">{subtitle}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Baris label→nilai di dalam kartu (mis. "Tier: Pro"). */
+export function CardField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-baseline gap-2 text-[12.5px]', className)}>
+      <span className="w-24 shrink-0 text-zinc-500">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-zinc-800">{children}</span>
+    </div>
+  );
+}
+
+/** Deretan badge di dalam kartu. */
+export function CardBadges({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-1.5">{children}</div>;
+}
+
+/** Deretan aksi di dalam kartu — target sentuh tetap 44px di HP. */
+export function CardActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-3">
+      {children}
     </div>
   );
 }

@@ -49,8 +49,18 @@
 }
 
 @layer components {
-  /* Kerangka admin: sidebar tetap di kiri, konten mengalir di kanan.
-     Di layar kecil sidebar berubah jadi drawer (lihat komponen sidebar). */
+  /* ------------------------------------------------------------------
+     Kerangka admin — ditulis MOBILE FIRST.
+
+     Base (tanpa prefix) = tampilan HP:
+       - sidebar disembunyikan, digantikan topbar sticky + drawer
+       - konten memakai lebar penuh, tanpa offset sidebar
+     `lg:` = perbaikan bertahap ke desktop: sidebar tetap muncul dan
+     konten digeser 16rem ke kanan.
+
+     Karena topbar ada di dalam flow (sticky, bukan fixed), tidak perlu
+     padding kompensasi `pt-14` seperti versi lama.
+     ------------------------------------------------------------------ */
   .admin-shell {
     @apply flex min-h-[100dvh] w-full bg-zinc-50;
   }
@@ -59,8 +69,28 @@
     @apply flex min-w-0 flex-1 flex-col lg:ml-64;
   }
 
+  /* Topbar HP: menempel di atas saat konten di-scroll. */
+  .admin-topbar {
+    @apply sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-zinc-200 bg-white/95 px-3 backdrop-blur lg:hidden;
+  }
+
   .admin-content {
     @apply flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7;
+  }
+
+  /* Cegah konten tertutup notch/iPhone home-indicator di bagian bawah. */
+  .admin-content-safe {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  /* Target sentuh: 44px di HP (WCAG 2.5.5), rapat lagi di desktop. */
+  .touch-target {
+    @apply inline-flex h-11 w-11 shrink-0 items-center justify-center lg:h-9 lg:w-9;
+  }
+
+  /* Tombol chip/filter: tinggi sentuh aman di HP. */
+  .touch-chip {
+    @apply inline-flex h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold transition active:scale-[0.99] lg:h-9;
   }
 
   .card-soft {
@@ -99,9 +129,15 @@
     @apply inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-[14px] font-semibold text-white transition active:scale-[0.99] disabled:opacity-50;
   }
 
-  /* Tabel data: header rapat, baris bisa di-scroll horizontal di HP. */
+  /* ------------------------------------------------------------------
+     Tabel data — HANYA tampil di layar besar.
+
+     Di HP tabel disembunyikan dan diganti daftar kartu (lihat
+     `TableCards` di components/ui/table.tsx). Jadi di HP tidak ada
+     scroll horizontal sama sekali.
+     ------------------------------------------------------------------ */
   .table-wrap {
-    @apply w-full overflow-x-auto;
+    @apply hidden w-full lg:block lg:overflow-x-auto;
   }
 
   .table-head {
@@ -110,6 +146,11 @@
 
   .table-cell {
     @apply whitespace-nowrap px-3 py-3 text-[13px] text-zinc-700;
+  }
+
+  /* Daftar kartu — padanan tabel untuk layar kecil (mobile-first). */
+  .card-list {
+    @apply space-y-2.5 lg:hidden;
   }
 
   .modal-backdrop {

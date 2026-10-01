@@ -20,7 +20,19 @@ import { Button, IconButton } from '@/components/ui/button';
 import { KuotaBadge, StoreStatusBadge, TierBadge } from '@/components/ui/badge';
 import { Field, Input, InputTelepon, Textarea } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
-import { AlertBox, EmptyState, TableWrap, Td, Th } from '@/components/ui/table';
+import {
+  AlertBox,
+  CardActions,
+  CardBadges,
+  CardField,
+  CardHeader,
+  CardItem,
+  EmptyState,
+  TableCards,
+  TableWrap,
+  Td,
+  Th,
+} from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { sejak } from '@/lib/format';
 import { cekJumlahKey } from '@/lib/validasi';
@@ -87,6 +99,83 @@ export function StoreManager({ stores }: { stores: Store[] }) {
     setDialog(null);
   }
 
+  /**
+   * Deretan aksi untuk satu toko. Dipakai dua kali — di baris tabel (desktop)
+   * dan di kartu (HP) — supaya tidak ada kode aksi yang dobel.
+   */
+  function aksiToko(s: Store) {
+    return (
+      <>
+        {/* Tautan, bukan button — supaya bisa klik-kanan "buka di tab baru".
+            Kelasnya disamakan dengan IconButton agar terlihat sama. */}
+        <Link
+          href={`/toko/${s.id}`}
+          aria-label={`Lihat detail ${s.nama_toko}`}
+          title={`Lihat detail ${s.nama_toko}`}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 lg:h-9 lg:w-9"
+        >
+          <Eye className="h-4 w-4" />
+        </Link>
+        <IconButton
+          label={`Top up ${s.nama_toko}`}
+          onClick={() => setDialog({ kind: 'topup', store: s })}
+        >
+          <KeyRound className="h-4 w-4" />
+        </IconButton>
+        <IconButton label={`Edit ${s.nama_toko}`} onClick={() => setDialog({ kind: 'edit', store: s })}>
+          <Pencil className="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          label={`${s.is_active ? 'Nonaktifkan' : 'Aktifkan'} ${s.nama_toko}`}
+          onClick={() => setAktifkan(s, !s.is_active)}
+          disabled={s.is_active}
+          className={cn(!s.is_active && 'border-emerald-200 text-emerald-700')}
+        >
+          {s.is_active ? <Ban className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+        </IconButton>
+        <IconButton
+          label={`Hapus ${s.nama_toko}`}
+          onClick={() => setDialog({ kind: 'hapus', store: s })}
+          className="border-red-200 text-red-600"
+        >
+          <Trash2 className="h-4 w-4" />
+        </IconButton>
+      </>
+    );
+  }
+
+  /**
+   * Checkbox pilihan toko.
+   *
+   * Kotaknya sengaja hanya 20px (biar tidak memenuhi kartu), tapi dibungkus
+   * `<label>` 44px supaya area sentuhnya mencapai target minimum di HP —
+   * mengetik label membuat area kosong di sekelilingnya ikut memindahkan centang.
+   */
+  const checkbox = (s: Store) => (
+    <label className="-m-2 grid h-11 w-11 cursor-pointer place-items-center">
+      <input
+        type="checkbox"
+        checked={dipilih.has(s.id)}
+        onChange={() => togglePilih(s.id)}
+        aria-label={`Pilih ${s.nama_toko}`}
+        className="h-5 w-5 rounded border-zinc-300 accent-zinc-900"
+      />
+    </label>
+  );
+
+  /** Checkbox "pilih semua" di header tabel. */
+  const checkboxSemua = (
+    <label className="-mx-3 -my-2.5 grid h-11 w-11 cursor-pointer place-items-center">
+      <input
+        type="checkbox"
+        checked={semuaTerpilih}
+        onChange={toggleSemua}
+        aria-label="Pilih semua toko"
+        className="h-5 w-5 rounded border-zinc-300 accent-zinc-900"
+      />
+    </label>
+  );
+
   return (
     <>
       {/* Toolbar: cari + bulk */}
@@ -102,7 +191,7 @@ export function StoreManager({ stores }: { stores: Store[] }) {
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {dipilih.size > 0 ? (
             <>
               <span className="text-[12.5px] font-semibold text-zinc-600">
@@ -140,7 +229,7 @@ export function StoreManager({ stores }: { stores: Store[] }) {
             ) : (
               <Link
                 href="/toko/baru"
-                className="inline-flex h-9 items-center rounded-lg bg-zinc-900 px-3 text-[13px] font-semibold text-white"
+                className="inline-flex h-11 items-center rounded-lg bg-zinc-900 px-3 text-[13px] font-semibold text-white lg:h-9"
               >
                 Daftar Toko Baru
               </Link>
@@ -151,15 +240,7 @@ export function StoreManager({ stores }: { stores: Store[] }) {
         <TableWrap>
           <thead>
             <tr>
-              <Th className="w-9">
-                <input
-                  type="checkbox"
-                  checked={semuaTerpilih}
-                  onChange={toggleSemua}
-                  aria-label="Pilih semua toko"
-                  className="h-4 w-4 rounded border-zinc-300 accent-zinc-900"
-                />
-              </Th>
+              <Th className="w-9">{checkboxSemua}</Th>
               <Th>Nama Toko</Th>
               <Th>Email Akun</Th>
               <Th>No HP</Th>
@@ -174,15 +255,7 @@ export function StoreManager({ stores }: { stores: Store[] }) {
           <tbody className="divide-y divide-zinc-100">
             {terfilter.map((s) => (
               <tr key={s.id} className="transition hover:bg-zinc-50/70">
-                <Td>
-                  <input
-                    type="checkbox"
-                    checked={dipilih.has(s.id)}
-                    onChange={() => togglePilih(s.id)}
-                    aria-label={`Pilih ${s.nama_toko}`}
-                    className="h-4 w-4 rounded border-zinc-300 accent-zinc-900"
-                  />
-                </Td>
+                <Td>{checkbox(s)}</Td>
                 <Td>
                   <Link
                     href={`/toko/${s.id}`}
@@ -208,51 +281,54 @@ export function StoreManager({ stores }: { stores: Store[] }) {
                   <StoreStatusBadge aktif={s.is_active} />
                 </Td>
                 <Td>
-                  <div className="flex items-center justify-end gap-1">
-                    {/* Tautan, bukan button — supaya bisa klik-kanan "buka di tab baru".
-                        Kelasnya disamakan dengan IconButton agar terlihat sama. */}
-                    <Link
-                      href={`/toko/${s.id}`}
-                      aria-label={`Lihat detail ${s.nama_toko}`}
-                      title={`Lihat detail ${s.nama_toko}`}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Link>
-                    <IconButton
-                      label={`Top up ${s.nama_toko}`}
-                      onClick={() => setDialog({ kind: 'topup', store: s })}
-                    >
-                      <KeyRound className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton
-                      label={`Edit ${s.nama_toko}`}
-                      onClick={() => setDialog({ kind: 'edit', store: s })}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton
-                      label={`${s.is_active ? 'Nonaktifkan' : 'Aktifkan'} ${s.nama_toko}`}
-                      onClick={() => setAktifkan(s, !s.is_active)}
-                      disabled={s.is_active}
-                      className={cn(!s.is_active && 'border-emerald-200 text-emerald-700')}
-                    >
-                      {s.is_active ? <Ban className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                    </IconButton>
-                    <IconButton
-                      label={`Hapus ${s.nama_toko}`}
-                      onClick={() => setDialog({ kind: 'hapus', store: s })}
-                      className="border-red-200 text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </IconButton>
-                  </div>
+                  <div className="flex items-center justify-end gap-1">{aksiToko(s)}</div>
                 </Td>
               </tr>
             ))}
           </tbody>
         </TableWrap>
       )}
+
+      {/* Tampilan HP: kartu satu per toko — tanpa scroll horizontal.
+          Render ulang karena tabel disembunyikan di bawah `lg`. */}
+      {terfilter.length > 0 ? (
+        <TableCards>
+          {terfilter.map((s) => (
+            <CardItem key={s.id}>
+              <CardHeader
+                right={checkbox(s)}
+                title={
+                  <Link
+                    href={`/toko/${s.id}`}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    {s.nama_toko}
+                  </Link>
+                }
+                subtitle={`daftar ${sejak(s.created_at)}`}
+              />
+              <div className="mt-2.5 space-y-1">
+                <CardField label="Email">{s.email ?? '-'}</CardField>
+                <CardField label="No HP">
+                  <span className="tabular">{s.no_hp ?? '-'}</span>
+                </CardField>
+                <CardField label="Alamat">{s.alamat ?? '-'}</CardField>
+                <CardField label="Terjual">
+                  <span className="tabular">{s.total_terjual}</span>
+                </CardField>
+                <CardField label="Sisa kuota">
+                  <KuotaBadge sisa={s.sisa_kuota} />
+                </CardField>
+              </div>
+              <CardBadges>
+                <TierBadge tier={s.tier} />
+                <StoreStatusBadge aktif={s.is_active} />
+              </CardBadges>
+              <CardActions>{aksiToko(s)}</CardActions>
+            </CardItem>
+          ))}
+        </TableCards>
+      ) : null}
 
       {/* ================= Dialog: Top Up ================= */}
       {dialog?.kind === 'topup' ? (
