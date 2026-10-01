@@ -168,9 +168,10 @@ begin
   end if;
 
   -- kunci baris supaya 2 admin top up bersamaan tidak saling menimpa
-  select license_quota into v_lama
-    from public.partners
-   where id = p_store_id
+  -- (alias tabel wajib: OUT `sisa_kuota` & kolom bermirip bisa jadi ambigu)
+  select p.license_quota into v_lama
+    from public.partners p
+   where p.id = p_store_id
      for update;
 
   if not found then
@@ -181,9 +182,9 @@ begin
   v_baru      := greatest(0, v_lama + p_jumlah);
   v_diterapkan := v_baru - v_lama;
 
-  update public.partners
+  update public.partners p
      set license_quota = v_baru
-   where id = p_store_id;
+   where p.id = p_store_id;
 
   -- audit tetap dicatat walau pengurangan lebih besar dari kuota (v_diterapkan 0/negatif)
   insert into public.topup_history (store_id, jumlah, sisa_quota, admin_by, catatan)
@@ -233,17 +234,19 @@ begin
   v_ids := p_store_ids;
 
   foreach v_id in array v_ids loop
-    select license_quota, nama_toko into v_lama, v_nama
-      from public.partners
-     where id = v_id
+    -- Kolom WAJIB diberi alias tabel: parameter OUT `nama_toko` bernama sama
+    -- dengan kolomnya, dan default plpgsql raise error saat ambigu.
+    select p.license_quota, p.nama_toko into v_lama, v_nama
+      from public.partners p
+     where p.id = v_id
        for update;
 
     if found then
       v_baru := greatest(0, coalesce(v_lama, 0) + p_jumlah);
 
-      update public.partners
+      update public.partners p
          set license_quota = v_baru
-       where id = v_id;
+       where p.id = v_id;
 
       insert into public.topup_history (store_id, jumlah, sisa_quota, admin_by, catatan)
       values (v_id, p_jumlah, v_baru, p_admin_by, p_catatan);
@@ -282,21 +285,23 @@ begin
     raise exception 'Status tidak valid';
   end if;
 
-  select serial_key into v_key
-    from public.licenses
-   where id = p_key_id
+  -- Kolom WAJIB diberi alias tabel: OUT `serial_key`/`status` bernama sama
+  -- dengan kolom tabel, dan default plpgsql raise error saat ambigu.
+  select l.serial_key into v_key
+    from public.licenses l
+   where l.id = p_key_id
      for update;
 
   if not found then
     raise exception 'Key tidak ditemukan';
   end if;
 
-  update public.licenses
+  update public.licenses l
      set status = p_status,
-         hwid_locked    = case when p_status = 'revoked' then null else hwid_locked end,
-         hwid_locked_at = case when p_status = 'revoked' then null else hwid_locked_at end,
-         activated_at   = case when p_status = 'revoked' then null else activated_at end
-   where id = p_key_id;
+         hwid_locked    = case when p_status = 'revoked' then null else l.hwid_locked end,
+         hwid_locked_at = case when p_status = 'revoked' then null else l.hwid_locked_at end,
+         activated_at   = case when p_status = 'revoked' then null else l.activated_at end
+   where l.id = p_key_id;
 
   return query select v_key, p_status;
 end;
