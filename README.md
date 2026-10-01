@@ -157,7 +157,7 @@ SQL `tier_name_of()` pada portal, sehingga tidak bisa tidak sinkron.
 
 ---
 
-## 6. Mode demo (lokal)
+## 6. Mode demo (opsional)
 
 Supaya aplikasi bisa dibuka dan dicoba **tanpa Supabase sama sekali**:
 
@@ -196,11 +196,18 @@ password yang di-reset, dan tidak ada satu pun request yang keluar ke Supabase.
 ### Pengamanannya
 
 - `src/lib/demo/config.ts` **membuang dirinya** (throw) begitu `DEMO_MODE=1`
-  bertemu `NODE_ENV=production`. Efeknya `npm run build` untuk deploy **gagal
-  dengan pesan jelas** — bukan diam-diam ter-deploy dengan kredensial demo.
+  bertemu env Supabase yang terisi. Kombinasi itulah satu-satunya yang
+  berbahaya: aplikasi yang kredensial demo-nya aktif tapi masih bisa menyentuh
+  database asli. Efeknya `npm run build` **gagal dengan pesan jelas** — bukan
+  diam-diam ter-deploy dengan kredensial demo.
+  Catatan: aturan ini bukan "larang di production". Yang berbahaya adalah.demo
+  hidup berdampingan dengan database, bukan nama environment-nya. Itu membuat
+  mode demo bisa di-deploy ke project Vercel terpisah (tanpa env Supabase) untuk
+  melihat-lihat tanpa menyentuh domain production.
 - Sesi demo memakai cookie sendiri (`kp_demo_admin`), tidak pernah cookie sesi
   Supabase, jadi tidak ada jalur whereby sesi demo bisa dianggap sesi admin
   sungguhan.
-- `DEMO_MODE` sengaja tidak ada di environment project Vercel.
-- Mode demo bukan pengganti setup produksi: begitu Supabase terhubung, matikan
-  (`DEMO_MODE=1` dihapus) karena data demo tidak ada di database manapun.
+- Di dalam aplikasi selalu ada badge "Mode demo" di sidebar supaya tidak ada
+  yang mengira datanya asli.
+- `DEMO_MODE` tidak boleh diisi bersamaan dengan env Supabase di project yang
+  sama. Untuk production, isikan env Supabase dan biarkan `DEMO_MODE` kosong.
