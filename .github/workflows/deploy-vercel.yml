@@ -1,0 +1,70 @@
+# =============================================================================
+#  Auto-deploy Admin Portal ke Vercel — setiap push ke main
+# =============================================================================
+#  Cara mengaktifkan (sekali saja, di repo GitHub settings):
+#   Settings > Secrets and variables > Actions > New repository secret
+#     Name : VERCEL_TOKEN
+#     Value: token dari akun Vercel Anda —
+#            https://vercel.com/account/settings/tokens  (buat token baru)
+#
+#  Org & Project ID sudah terpasang (bukan rahasia), jadi cukup 1 secret.
+#  Sebelum VERCEL_TOKEN diisi, step deploy otomatis di-SKIP (tidak error).
+# =============================================================================
+name: Deploy admin portal ke Vercel
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.mjs'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'tsconfig.json'
+      - '.github/workflows/deploy-vercel.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-deploy-admin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy production (pos-amd-admin-portal.vercel.app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_1kqnB2pZeH0WBhuUGvqje7UL
+      VERCEL_PROJECT_ID: prj_Q02V1al2Vig2KXP2au6XUU6nAoD6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Periksa VERCEL_TOKEN
+        id: check
+        env:
+          TOKEN_VALUE: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$TOKEN_VALUE" ] && [ "$TOKEN_VALUE" != "null" ]; then
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_TOKEN tersedia — deploy akan dijalankan."
+          else
+            echo "ready=no" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_TOKEN belum di-set — deploy di-skip."
+          fi
+
+      - name: Deploy ke Vercel (production)
+        if: steps.check.outputs.ready == 'yes'
+        run: npx --yes vercel deploy --prod --yes
