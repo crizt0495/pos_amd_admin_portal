@@ -60,7 +60,13 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
     return keys.filter((k) => {
       if (status !== 'semua' && k.status !== status) return false;
       if (!q) return true;
-      return [k.serial_key, k.nama_pembeli, k.nama_toko ?? '', k.telepon ?? '']
+      return [
+        k.serial_key,
+        k.nama_pembeli,
+        k.nama_toko ?? '',
+        k.telepon ?? '',
+        k.alamat_pembeli ?? '',
+      ]
         .join(' ')
         .toLowerCase()
         .includes(q);
@@ -166,7 +172,7 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
           <Input
             value={cari}
             onChange={(e) => setCari(e.target.value)}
-            placeholder="Cari serial key, nama pembeli, toko, telepon…"
+            placeholder="Cari serial key, nama pembeli, alamat, toko, telepon…"
             className="pl-9"
             aria-label="Cari key"
           />
@@ -228,7 +234,7 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
           <thead>
             <tr>
               <Th>Serial Key</Th>
-              <Th>Pembeli</Th>
+              <Th className="min-w-[200px]">Pembeli</Th>
               <Th>Toko Penjual</Th>
               <Th>Paket</Th>
               <Th>Pilihan</Th>
@@ -250,9 +256,22 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
                   ) : null}
                 </Td>
                 <Td>
-                  <p className="font-medium text-zinc-800">{k.nama_pembeli}</p>
+                  {/* 3 baris: nama, alamat (2 baris + title), no HP. */}
+                  <p className="text-sm font-medium text-zinc-800">{k.nama_pembeli}</p>
+                  {k.alamat_pembeli ? (
+                    <p
+                      title={k.alamat_pembeli}
+                      className="line-clamp-2 max-w-[200px] text-xs leading-snug text-gray-600"
+                    >
+                      {k.alamat_pembeli}
+                    </p>
+                  ) : (
+                    <p className="max-w-[200px] text-xs leading-snug text-gray-600">
+                      Alamat belum diisi
+                    </p>
+                  )}
                   {k.telepon ? (
-                    <p className="tabular text-[11.5px] text-zinc-500">{k.telepon}</p>
+                    <p className="tabular text-[11px] text-gray-400">{k.telepon}</p>
                   ) : null}
                 </Td>
                 <Td className="text-zinc-600">{k.nama_toko ?? '-'}</Td>
