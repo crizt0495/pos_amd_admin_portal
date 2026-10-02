@@ -129,15 +129,22 @@ export default async function LoginPage({
           {demoAktif ? (
             <>
               Data di bawah ini <strong>palsu</strong> dan kembali ke awal setiap{' '}
-              <code className="rounded bg-zinc-100 px-1 py-0.5">npm run dev</code> di-restart. Tidak
-              ada yang tersimpan ke database.
+              {/* text-zinc-600, bukan text-zinc-500: chip ini duduk di bg-zinc-100,
+                  dan zinc-500 hanya 4,40:1 (butuh 4,50:1). Lihat paragraf bawah. */}
+              <code className="rounded bg-zinc-100 px-1 py-0.5 text-zinc-600">npm run dev</code>{' '}
+              di-restart. Tidak ada yang tersimpan ke database.
             </>
           ) : (
             <>
               Hanya akun dengan username terdaftar di{' '}
-              <code className="rounded bg-zinc-100 px-1 py-0.5">admin_accounts</code>, email di{' '}
-              <code className="rounded bg-zinc-100 px-1 py-0.5">ADMIN_EMAIL</code>, atau role{' '}
-              <code className="rounded bg-zinc-100 px-1 py-0.5">super_admin</code> yang bisa masuk.
+              <code className="rounded bg-zinc-100 px-1 py-0.5 text-zinc-600">admin_accounts</code>,
+              email di{' '}
+              <code className="rounded bg-zinc-100 px-1 py-0.5 text-zinc-600">ADMIN_EMAIL</code>,
+              atau role{' '}
+              <code className="rounded bg-zinc-100 px-1 py-0.5 text-zinc-600">
+                super_admin
+              </code>{' '}
+              yang bisa masuk.
             </>
           )}
         </p>
