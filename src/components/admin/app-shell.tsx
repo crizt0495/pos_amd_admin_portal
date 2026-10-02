@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { AccountSheet, AppNav, judulHalaman } from '@/components/admin/app-nav';
+import { AccountMenu, AppNav, judulHalaman } from '@/components/admin/app-nav';
 import { usePathname } from 'next/navigation';
 
 /**
@@ -46,7 +46,7 @@ export function AppShell({
             Demo
           </span>
         ) : null}
-        <AccountSheet email={email} demo={demo} />
+        <AccountMenu email={email} demo={demo} />
       </header>
 
       <div className="admin-main">

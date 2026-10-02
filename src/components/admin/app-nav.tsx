@@ -10,7 +10,6 @@ import {
   Store,
   UserCog,
   UserPlus,
-  X,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -85,44 +84,49 @@ export function AppNav() {
 }
 
 /**
- * Sheet akun — dipicu dari avatar di topbar.
+ * Menu akun — dipicu dari avatar di topbar.
  *
  * Menggantikan blok "Super Admin + Keluar" yang tadinya ada di sidebar.
- * Bottom sheet (naik dari bawah + backdrop), bukan dialog di tengah, supaya
- * terasa native di HP.
+ *
+ * Dulu ini bottom sheet: panel selebar layar naik dari bawah, backdrop gelap
+ * `aria-modal`, plus penguncian scroll body. Untuk satu aksi saja
+ * ("Keluar") itu berlebihan dan di HP menutupi layar. Sekarang dropdown
+ * kecil yang menempel di bawah avatar — tanpa backdrop, tanpa kunci scroll,
+ * tanpa `fixed` + centering.
+ *
+ * `right-0` menjaga dropdown tetap di dalam viewport walau layar sempit.
  */
-export function AccountSheet({
-  email,
-  demo = false,
-}: {
-  email: string;
-  demo?: boolean;
-}) {
+export function AccountMenu({ email, demo = false }: { email: string; demo?: boolean }) {
   const [buka, setBuka] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
 
-  // Escape menutup sheet + kunci scroll body seperti dialog pada umumnya.
+  // Klik di luar -> tutup. Escape -> tutup + kembali fokus ke avatar.
   React.useEffect(() => {
     if (!buka) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setBuka(false);
+    const onPointerDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setBuka(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setBuka(false);
+      ref.current?.querySelector('button')?.focus();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
     };
   }, [buka]);
 
   return (
-    <>
-      {/* Pemicu: avatar di topbar */}
+    <div className="relative shrink-0" ref={ref}>
       <button
         type="button"
-        onClick={() => setBuka(true)}
-        aria-label="Buka menu akun"
+        onClick={() => setBuka((v) => !v)}
+        aria-haspopup="menu"
         aria-expanded={buka}
+        aria-label="Menu akun"
         className="app-avatar"
       >
         {inisial(email)}
@@ -130,53 +134,34 @@ export function AccountSheet({
 
       {buka ? (
         <div
-          className="app-sheet-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Menu akun"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setBuka(false);
-          }}
+          role="menu"
+          className="absolute right-0 top-12 z-50 w-56 animate-fade-in rounded-xl border border-zinc-200/80 bg-white py-2 shadow-xl"
         >
-          <div className="app-sheet">
-            {/* Gagang sheet — penanda visual ala bottom sheet */}
-            <div className="mx-auto mb-4 h-1 w-9 shrink-0 rounded-full bg-zinc-300" aria-hidden />
-
-            <div className="flex items-center gap-3">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-zinc-900 text-[16px] font-bold text-white">
-                {inisial(email)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-bold text-zinc-900">Super Admin</p>
-                <p className="truncate text-[12.5px] text-zinc-500" title={email}>
-                  {email}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBuka(false)}
-                aria-label="Tutup menu akun"
-                className="touch-target -mr-2 rounded-xl text-zinc-500 transition hover:bg-zinc-100"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {demo ? (
-              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] font-semibold text-amber-900">
-                Mode demo — semua data palsunya, tanpa database.
-              </p>
-            ) : null}
-
-            <form method="post" action="/api/auth/logout" className="mt-4">
-              <button type="submit" className="btn-danger w-full">
-                <LogOut className="h-4 w-4" />
-                Keluar
-              </button>
-            </form>
+          <div className="border-b border-zinc-100 px-4 pb-2.5 pt-1">
+            <p className="text-[13px] font-bold text-zinc-900">Super Admin</p>
+            <p className="truncate text-[11.5px] text-zinc-500" title={email}>
+              {email}
+            </p>
           </div>
+
+          {demo ? (
+            <p className="mx-2 mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] font-semibold leading-snug text-amber-900">
+              Mode demo — data palsunya, tanpa database.
+            </p>
+          ) : null}
+
+          <form method="post" action="/api/auth/logout" className="mt-1.5">
+            <button
+              type="submit"
+              role="menuitem"
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13.5px] font-medium text-red-600 transition hover:bg-red-50"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              Keluar
+            </button>
+          </form>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
