@@ -306,6 +306,13 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
               />
               <div className="mt-2.5 space-y-1">
                 <CardField label="Pembeli">{k.nama_pembeli}</CardField>
+                <CardField label="Alamat">
+                  {k.alamat_pembeli ? (
+                    k.alamat_pembeli
+                  ) : (
+                    <span className="text-zinc-400">Alamat belum diisi</span>
+                  )}
+                </CardField>
                 {k.telepon ? (
                   <CardField label="Telepon">
                     <span className="tabular">{k.telepon}</span>
