@@ -42,7 +42,7 @@ export default async function LoginPage({
           <p className="mt-1 text-[13px] text-zinc-500">
             Masuk sebagai super admin untuk mengelola toko &amp; key.
           </p>
-          <p className="mt-1 text-[12px] text-zinc-400">
+          <p className="mt-1 text-[12px] text-zinc-500">
             username atau email super admin
           </p>
         </div>
@@ -142,7 +142,7 @@ export default async function LoginPage({
           )}
         </p>
 
-        <p className="mt-2 text-center text-[12px] text-zinc-400">{env.appName}</p>
+        <p className="mt-2 text-center text-[12px] text-zinc-500">{env.appName}</p>
       </div>
     </main>
   );

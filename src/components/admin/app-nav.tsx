@@ -71,6 +71,12 @@ export function AppNav() {
           <Link
             key={href}
             href={href}
+            // Bar bawah selalu terlihat, jadi Next akan auto-prefetch kelima
+            // route begitu halaman terbuka. Prefetch itu berebut bandwidth dengan
+            // LCP saat load pertama (terlihat di trace: `_rsc=` untuk /toko/baru
+            // dan /akun merebut koneksi sebelum hydrate selesai). Dimatikan;
+            // navigasi berikutnya tetap cepat karena RSC-nya di-cache router.
+            prefetch={false}
             aria-current={aktif ? 'page' : undefined}
             className={cn('app-nav-item', aktif && 'app-nav-item-active')}
           >

@@ -7,7 +7,11 @@ import { requireAdmin } from '@/lib/supabase/guard';
 import type { LicenseStatus } from '@/types';
 
 export const metadata: Metadata = { title: 'Manajemen Serial Key' };
+
+// Halaman ini SELALU dinamis: daftar key ikut berubah begitu ada generate/revoke,
+// jadi tidak boleh pernah disimpan di cache Full Route / Data Cache.
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 /** Status yang boleh muncul di URL. Selain itu diabaikan (bukan error 500). */
 const STATUS_VALID: LicenseStatus[] = ['unused', 'active', 'blocked', 'revoked'];

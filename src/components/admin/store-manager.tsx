@@ -263,7 +263,7 @@ export function StoreManager({ stores }: { stores: Store[] }) {
                   >
                     {s.nama_toko}
                   </Link>
-                  <p className="text-[11px] text-zinc-400">daftar {sejak(s.created_at)}</p>
+                  <p className="text-[11px] text-zinc-500">daftar {sejak(s.created_at)}</p>
                 </Td>
                 <Td className="text-zinc-600">{s.email ?? '-'}</Td>
                 <Td className="tabular text-zinc-600">{s.no_hp ?? '-'}</Td>
@@ -592,7 +592,7 @@ function BulkTopupDialog({
             {stores.map((s) => (
               <li key={s.id} className="truncate">
                 • {s.nama_toko}{' '}
-                <span className="text-zinc-400">(sisa {s.sisa_kuota} → {Math.max(0, s.sisa_kuota + Math.trunc(n || 0))})</span>
+                <span className="text-zinc-500">(sisa {s.sisa_kuota} → {Math.max(0, s.sisa_kuota + Math.trunc(n || 0))})</span>
               </li>
             ))}
           </ul>

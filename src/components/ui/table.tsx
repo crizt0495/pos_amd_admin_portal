@@ -121,6 +121,117 @@ export function Td({
 }
 
 /** Placeholder saat data sedang dimuat. */
+/* ------------------------------------------------------------------ */
+/* Daftar responsif SATU DOM untuk HP & desktop                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Kenapa ini ada (dan bukan `TableWrap` + `TableCards`):
+ *
+ * Versi lama merender DUA salinan data sekaligus — `<table>` untuk desktop
+ * dan daftar kartu untuk HP — lalu menyembunyikan salah satunya lewat CSS
+ * (`hidden lg:block` vs `lg:hidden`). CSS hiding tidak mencegah React
+ * merender, jadi tiap baris di-hydrate dua kali, di-recalc dua kali, dan
+ * ikut masuk payload HTML (178 KB untuk 20 key, bukan 95 KB). Audit
+ * Lighthouse `mainthread-work-breakdown` menunjukkan `styleLayout` 754 ms
+ * dan `scriptEvaluation` 1132 ms — hampir seluruhnya dari duplikasi ini.
+ *
+ * `ListShell`/`ListHead`/`ListRow` membuat SATU markup yang berubah bentuk
+ * murni lewat CSS: HP = kartu bertumpuk, `lg:` ke atas = baris tabel. Satu
+ * DOM, satu kali hydrate, nol CLS.
+ *
+ * `gridClass` WAJIB sama persis antara `ListHead` dan `ListRow` supaya kolom
+ * header dan isi tetap sejajar.
+ */
+
+/** Wadah daftar: satu kartu putih membungkus header + baris. */
+export function ListShell({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('overflow-hidden rounded-2xl border border-zinc-200/80 bg-white', className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Baris judul kolom. Hanya muncul di layar lebar (`lg:`), seperti tabel. */
+export function ListHead({
+  children,
+  gridClass,
+}: {
+  children: React.ReactNode;
+  gridClass: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'hidden border-b border-zinc-200/80 bg-zinc-50 px-3 py-2.5 lg:grid',
+        gridClass,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Satu kepala kolom, untuk `ListHead`. */
+export function ListHeadCell({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return (
+    <span
+      className={cn(
+        'text-[11px] font-bold uppercase tracking-wide text-zinc-500',
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Satu item daftar = satu `<li>`. Menggantikan `CardItem` untuk daftar yang
+ * juga perlu tampil sebagai baris tabel di `lg:`.
+ *
+ * Pemisah antar baris dipasang oleh `divide-y` pada `<ul>` induknya, jadi
+ * kelas ini tidak perlu border sendiri (menghindari garis dobel).
+ */
+export function ListRow({
+  children,
+  gridClass,
+  className,
+}: {
+  children: React.ReactNode;
+  gridClass: string;
+  className?: string;
+}) {
+  return (
+    <li
+      className={cn(
+        'px-3.5 py-3.5 transition hover:bg-zinc-50/70 lg:grid lg:items-start lg:gap-x-3 lg:px-3 lg:py-3',
+        gridClass,
+        className,
+      )}
+    >
+      {children}
+    </li>
+  );
+}
+
+/**
+ * Label kecil di dalam sel — hanya kelihatan di HP (baris tabel tak butuh).
+ *
+ * Warna `zinc-500`, bukan `zinc-400`: label ini kini benar-benar terlihat di
+ * HP (sebelumnya duplikat tabel+kartu disembunyikan CSS, jadi teks warna
+ * muda lolos dari audit tanpa pernah diperiksa). `zinc-400` di atas putih
+ * hanya ~2,6:1 dan gagal WCAG AA.
+ */
+export function ListLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-0.5 block text-[10.5px] font-bold uppercase tracking-wide text-zinc-500 lg:hidden">
+      {children}
+    </span>
+  );
+}
+
 export function TableLoading({ rows = 5, cols = 6 }: { rows?: number; cols?: number }) {
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white p-4">

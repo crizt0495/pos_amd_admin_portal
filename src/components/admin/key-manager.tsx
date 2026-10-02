@@ -10,16 +10,12 @@ import { Input } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
 import {
   AlertBox,
-  CardActions,
-  CardBadges,
-  CardField,
-  CardHeader,
-  CardItem,
   EmptyState,
-  TableCards,
-  TableWrap,
-  Td,
-  Th,
+  ListHead,
+  ListHeadCell,
+  ListLabel,
+  ListRow,
+  ListShell,
 } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { rupiah, tanggalWaktu } from '@/lib/format';
@@ -45,6 +41,16 @@ const FILTER_STATUS = [
 ] as const;
 
 type FilterStatus = (typeof FILTER_STATUS)[number]['nilai'];
+
+/**
+ * Template kolom untuk `lg:` — dipakai PERSIS sama oleh `ListHead` dan
+ * `ListRow`, jadi judul kolom dan isi selalu sejajar. Di bawah `lg` template
+ * ini diabaikan: tiap sel jadi blok bertumpuk dengan `ListLabel`.
+ *
+ * Urutannya harus sama dengan urutan sel di dalam `ListRow`.
+ */
+const GRID_DAFTAR =
+  'lg:grid-cols-[minmax(128px,1fr)_minmax(168px,1.5fr)_minmax(92px,.9fr)_minmax(74px,.7fr)_minmax(82px,.8fr)_minmax(82px,.8fr)_minmax(108px,.9fr)_minmax(78px,.7fr)_minmax(64px,auto)]';
 
 export function KeyManager({
   keys,
@@ -179,9 +185,7 @@ export function KeyManager({
   function selKey(k: Key) {
     return (
       <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[12px] font-semibold text-zinc-900">
-          {k.serial_key}
-        </span>
+        <span className="font-mono text-[12px] font-semibold text-zinc-900">{k.serial_key}</span>
         <IconButton
           label={`Salin ${k.serial_key}`}
           onClick={() => salin(k.serial_key)}
@@ -270,33 +274,46 @@ export function KeyManager({
           }
         />
       ) : (
-        <TableWrap>
-          <thead>
-            <tr>
-              <Th>Serial Key</Th>
-              <Th className="min-w-[200px]">Pembeli</Th>
-              <Th>Toko Penjual</Th>
-              <Th>Paket</Th>
-              <Th>Pilihan</Th>
-              <Th className="text-right">Komisi</Th>
-              <Th>Tanggal Generate</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Aksi</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
+        /*
+         * SATU markup untuk HP & desktop.
+         *
+         * Sebelumnya halaman ini merender `<TableWrap>` (tabel, disembunyikan
+         * di HP) DAN `TableCards` (kartu, disembunyikan di desktop) sekaligus.
+         * CSS `hidden` tidak mencegah React merender, jadi 20 key ter-render
+         * dua kali: HTML 178 KB, `styleLayout` 754 ms, `scriptEvaluation`
+         * 1132 ms. Sekarang cukup satu `<ul>`; `lg:grid-cols-*` yang mengubah
+         * kartu bertumpuk menjadi baris tabel. Nol duplikasi, CLS tetap 0.
+         */
+        <ListShell>
+          <ListHead gridClass={GRID_DAFTAR}>
+            <ListHeadCell>Serial Key</ListHeadCell>
+            <ListHeadCell>Pembeli</ListHeadCell>
+            <ListHeadCell>Toko Penjual</ListHeadCell>
+            <ListHeadCell>Paket</ListHeadCell>
+            <ListHeadCell>Pilihan</ListHeadCell>
+            <ListHeadCell className="text-right">Komisi</ListHeadCell>
+            <ListHeadCell>Tanggal Generate</ListHeadCell>
+            <ListHeadCell>Status</ListHeadCell>
+            <ListHeadCell className="text-right">Aksi</ListHeadCell>
+          </ListHead>
+
+          <ul className="divide-y divide-zinc-100">
             {keys.map((k) => (
-              <tr key={k.id} className="transition hover:bg-zinc-50/70">
-                <Td>
+              <ListRow key={k.id} gridClass={GRID_DAFTAR}>
+                {/* 1 — Serial key + tombol salin */}
+                <div className="min-w-0">
                   {selKey(k)}
                   {k.hwid_locked ? (
-                    <p className="mt-0.5 text-[10.5px] text-zinc-400" title={k.hwid_locked}>
+                    // zinc-500 bukan zinc-400: teks kecil ini tampil penuh di
+                    // HP dan zinc-400 hanya ~2,6:1 (gagal WCAG AA).
+                    <p className="mt-0.5 text-[10.5px] text-zinc-500" title={k.hwid_locked}>
                       terkunci ke {k.device_name ?? 'perangkat'}
                     </p>
                   ) : null}
-                </Td>
-                <Td>
-                  {/* 3 baris: nama, alamat (2 baris + title), no HP. */}
+                </div>
+
+                {/* 2 — Pembeli: nama, alamat, telepon */}
+                <div className="mt-2.5 min-w-0 lg:mt-0">
                   <p className="text-sm font-medium text-zinc-800">{k.nama_pembeli}</p>
                   {k.alamat_pembeli ? (
                     <p
@@ -311,71 +328,56 @@ export function KeyManager({
                     </p>
                   )}
                   {k.telepon ? (
-                    <p className="tabular text-[11px] text-gray-400">{k.telepon}</p>
+                    // gray-500 bukan gray-400, alasan kontras sama seperti di atas.
+                    <p className="tabular text-[11px] text-gray-500">{k.telepon}</p>
                   ) : null}
-                </Td>
-                <Td className="text-zinc-600">{k.nama_toko ?? '-'}</Td>
-                <Td>{PAKET_LABEL[k.paket]}</Td>
-                <Td>{LICENSE_TYPE_LABEL[k.pilihan]}</Td>
-                <Td className="tabular text-right">{rupiah(k.komisi)}</Td>
-                <Td className="text-zinc-600">{tanggalWaktu(k.created_at)}</Td>
-                <Td>
-                  <KeyStatusBadge status={k.status} />
-                </Td>
-                <Td>
-                  <div className="flex items-center justify-end gap-1">{aksiKey(k)}</div>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      )}
+                </div>
 
-      {/* Tampilan HP: kartu satu per key — tanpa scroll horizontal. */}
-      {keys.length > 0 ? (
-        <TableCards>
-          {keys.map((k) => (
-            <CardItem key={k.id}>
-              <CardHeader
-                title={<span className="font-mono">{k.serial_key}</span>}
-                subtitle={
-                  k.hwid_locked
-                    ? `terkunci ke ${k.device_name ?? 'perangkat'}`
-                    : tanggalWaktu(k.created_at)
-                }
-              />
-              <div className="mt-2.5 space-y-1">
-                <CardField label="Pembeli">{k.nama_pembeli}</CardField>
-                <CardField label="Alamat">
-                  {k.alamat_pembeli ? (
-                    k.alamat_pembeli
-                  ) : (
-                    <span className="text-zinc-400">Alamat belum diisi</span>
-                  )}
-                </CardField>
-                {k.telepon ? (
-                  <CardField label="Telepon">
-                    <span className="tabular">{k.telepon}</span>
-                  </CardField>
-                ) : null}
-                <CardField label="Toko">{k.nama_toko ?? '-'}</CardField>
-                <CardField label="Paket">{PAKET_LABEL[k.paket]}</CardField>
-                <CardField label="Pilihan">{LICENSE_TYPE_LABEL[k.pilihan]}</CardField>
-                <CardField label="Komisi">
+                {/* 3 — Toko Penjual */}
+                <div className="mt-2.5 min-w-0 lg:mt-0">
+                  <ListLabel>Toko</ListLabel>
+                  <span className="text-zinc-600">{k.nama_toko ?? '-'}</span>
+                </div>
+
+                {/* 4 — Paket */}
+                <div className="mt-2.5 lg:mt-0">
+                  <ListLabel>Paket</ListLabel>
+                  <span>{PAKET_LABEL[k.paket]}</span>
+                </div>
+
+                {/* 5 — Pilihan */}
+                <div className="mt-2.5 lg:mt-0">
+                  <ListLabel>Pilihan</ListLabel>
+                  <span>{LICENSE_TYPE_LABEL[k.pilihan]}</span>
+                </div>
+
+                {/* 6 — Komisi */}
+                <div className="mt-2.5 lg:mt-0 lg:text-right">
+                  <ListLabel>Komisi</ListLabel>
                   <span className="tabular">{rupiah(k.komisi)}</span>
-                </CardField>
-              </div>
-              <CardBadges>
-                <KeyStatusBadge status={k.status} />
-              </CardBadges>
-              <CardActions>
-                {selKey(k)}
-                {aksiKey(k)}
-              </CardActions>
-            </CardItem>
-          ))}
-        </TableCards>
-      ) : null}
+                </div>
+
+                {/* 7 — Tanggal generate */}
+                <div className="mt-2.5 lg:mt-0">
+                  <ListLabel>Tanggal Generate</ListLabel>
+                  <span className="text-zinc-600">{tanggalWaktu(k.created_at)}</span>
+                </div>
+
+                {/* 8 — Status */}
+                <div className="mt-2.5 lg:mt-0">
+                  <ListLabel>Status</ListLabel>
+                  <KeyStatusBadge status={k.status} />
+                </div>
+
+                {/* 9 — Aksi (target sentuh tetap 44px di HP) */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 lg:mt-0 lg:justify-end">
+                  {aksiKey(k)}
+                </div>
+              </ListRow>
+            ))}
+          </ul>
+        </ListShell>
+      )}
 
       {/* Navigasi halaman — disembunyikan kalau hasilnya muat satu halaman. */}
       {keys.length > 0 && totalHalaman > 1 ? (
@@ -439,8 +441,8 @@ export function KeyManager({
                 </>
               ) : (
                 <>
-                  Key <strong>{konfirmasi.serial_key}</strong> akan diblokir — tidak bisa dipakai
-                  di komputer kasir, dan kunci perangkatnya tetap terpasang.
+                  Key <strong>{konfirmasi.serial_key}</strong> akan diblokir — tidak bisa dipakai di
+                  komputer kasir, dan kunci perangkatnya tetap terpasang.
                 </>
               )}
             </AlertBox>

@@ -49,9 +49,13 @@ export function AppShell({
         <AccountMenu email={email} demo={demo} />
       </header>
 
-      <div className="admin-main">
+      {/*
+        `main` (bukan `div`) supaya halaman punya landmark utama — ini yang
+        diuji audit "landmark-one-main". Styling tetap lewat class `admin-main`.
+      */}
+      <main className="admin-main">
         <div className="admin-content admin-content-safe">{children}</div>
-      </div>
+      </main>
 
       {/* Navigasi bawah — docked, melintasi seluruh lebar layar */}
       <AppNav />
