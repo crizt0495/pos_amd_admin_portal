@@ -14,7 +14,14 @@ import { demoAktif } from '@/lib/demo/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/supabase/guard';
 import { hariSingkat, tanggalPendek } from '@/lib/format';
-import type { DashboardSummary, Key, SalesPoint, Store, TopupHistory } from '@/types';
+import type {
+  DashboardSummary,
+  Key,
+  LicenseStatus,
+  SalesPoint,
+  Store,
+  TopupHistory,
+} from '@/types';
 
 /**
  * =============================================================================
@@ -194,24 +201,168 @@ export const getStoreDetail = cache(async (id: string): Promise<{
 /* Key global                                                         */
 /* ------------------------------------------------------------------ */
 
-export const getKeys = cache(
-  async (limit = 500): Promise<{ keys: Key[]; total: number }> => {
-    await wajibAdmin();
+/** Jumlah baris per halaman untuk daftar key. Batas atas 50 (lihat `getKeys`). */
+export const PER_HALAMAN = 20;
 
-    if (demoAktif) {
-      const semua = demoKeys();
-      return { keys: semua.slice(0, limit), total: semua.length };
-    }
+/** Kolom yang boleh dicari dari kotak "Cari key". */
+const KOLOM_CARI_KEY = [
+  'serial_key',
+  'nama_pembeli',
+  'nama_toko',
+  'telepon',
+  'alamat_pembeli',
+] as const;
 
-    const db = createAdminClient();
+/**
+ * Bersihkan kata kunci sebelum masuk ke filter `.or()`.
+ *
+ * PENTING: `or()` dirakit jadi string query PostgREST, jadi `,` `(` `)` di
+ * dalam input user bisa mengubah strukturnya (mis. membuatOR kedua yang
+ * tidak SHOULD). Jadi semua karakter yang punya arti khusus di PostgREST
+ * dibuang, bukan cuma di-escape. Panjang juga dibatasi supaya query tidak
+ * jadi ridiculously panjang.
+ */
+function bersihkanCari(q: string): string {
+  return q
+    .replace(/[,()%*"'\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
 
-    const { data, error, count } = await db
+/**
+ * Jumlah key per status untuk seluruh tabel, bukan cuma halaman yang sedang
+ * dibuka. Dipakai ringkasan di header /keys.
+ *
+ * `head: true` = PostgREST hanya menghitung, tidak mengirim baris sama sekali,
+ * jadi murah walau tabelnya besar. Dipanggil paralel.
+ */
+export const getRingkasanKey = cache(async (): Promise<Record<LicenseStatus, number>> => {
+  if (demoAktif) {
+    const semua = demoKeys();
+    return {
+      unused: semua.filter((k) => k.status === 'unused').length,
+      active: semua.filter((k) => k.status === 'active').length,
+      blocked: semua.filter((k) => k.status === 'blocked').length,
+      revoked: semua.filter((k) => k.status === 'revoked').length,
+    };
+  }
+
+  const db = createAdminClient();
+  const statuses: LicenseStatus[] = ['unused', 'active', 'blocked', 'revoked'];
+  const hasil = await Promise.all(
+    statuses.map((s) =>
+      db.from('admin_keys').select('id', { count: 'exact', head: true }).eq('status', s),
+    ),
+  );
+
+  return statuses.reduce(
+    (acc, s, i) => ({ ...acc, [s]: hasil[i]?.count ?? 0 }),
+    {} as Record<LicenseStatus, number>,
+  );
+});
+
+export type ParamsKey = {
+  q?: string;
+  status?: LicenseStatus | 'semua';
+  page?: number;
+  perPage?: number;
+};
+
+export type HasilKey = {
+  keys: Key[];
+  total: number;
+  page: number;
+  perHalaman: number;
+  totalHalaman: number;
+};
+
+export const getKeys = cache(async (params: ParamsKey = {}): Promise<HasilKey> => {
+  await wajibAdmin();
+
+  // 20 per halaman; 50 = plafon keras supaya tidak pernah menarik ratusan baris.
+  const perHalaman = Math.min(Math.max(Math.trunc(params.perPage ?? PER_HALAMAN), 1), 50);
+  let page = Math.max(1, Math.trunc(params.page ?? 1));
+  const status = params.status ?? 'semua';
+  const q = bersihkanCari(params.q ?? '');
+
+  if (demoAktif) {
+    const semua = demoKeys().filter((k) => {
+      if (status !== 'semua' && k.status !== status) return false;
+      if (!q) return true;
+      return KOLOM_CARI_KEY.some((c) => String(k[c] ?? '').toLowerCase().includes(q.toLowerCase()));
+    });
+    const totalHalaman = Math.max(1, Math.ceil(semua.length / perHalaman));
+    page = Math.min(page, totalHalaman);
+    const dari = (page - 1) * perHalaman;
+    return {
+      keys: semua.slice(dari, dari + perHalaman),
+      total: semua.length,
+      page,
+      perHalaman,
+      totalHalaman,
+    };
+  }
+
+  const db = createAdminClient();
+
+  // Filter status & pencarian sengaja dipasang secara kondisional: `.eq()` /
+  // `.or()` dengan nilai kosong akan menambah klausa yang tidak kita mau
+  // (mis. `status=eq.` kalau status kosong).
+  const ambilHalaman = (hal: number) => {
+    let qy = db
       .from('admin_keys')
       .select(KOLOM_KEY, { count: 'exact' })
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .range((hal - 1) * perHalaman, hal * perHalaman - 1);
+    if (status !== 'semua') qy = qy.eq('status', status);
+    if (q) qy = qy.or(KOLOM_CARI_KEY.map((c) => `${c}.ilike.%${q}%`).join(','));
+    return qy;
+  };
 
-    if (error) throw new Error(`Gagal memuat key: ${error.message}`);
-    return { keys: (data ?? []) as Key[], total: count ?? 0 };
-  },
-);
+  let { data, error, count } = await ambilHalaman(page);
+
+  // PostgREST menjawab "Requested range not satisfiable" (HTTP 416), bukan array
+  // kosong, kalau halaman yang diminta melewati baris terakhir — mis. `?page=99`
+  // di URL atau jumlah kunci yang menyusut. Itu kondisi normal, bukan kegagalan.
+  //
+  // Di sini kita KLEM ke halaman terakhir yang benar-benar berisi data. clamp
+  // dilakukan di lapisan data, bukan dengan `redirect()` di page: halaman /keys
+  // punya `loading.tsx`, jadi Next sudah mulai streaming dan header terkirim
+  // duluan — `redirect()` tidak lagi bisa mengirim 307 dan hasilnya halamannya
+  // kosong. Query tambahan ini hanya jalan di kasus langka ini.
+  if (error && /range not satisfiable/i.test(error.message)) {
+    let hitung = db.from('admin_keys').select('id', { count: 'exact', head: true });
+    if (status !== 'semua') hitung = hitung.eq('status', status);
+    if (q) hitung = hitung.or(KOLOM_CARI_KEY.map((c) => `${c}.ilike.%${q}%`).join(','));
+
+    const totalHitung = (await hitung).count ?? 0;
+    const halTerakhir = Math.max(1, Math.ceil(totalHitung / perHalaman));
+
+    if (halTerakhir < page) {
+      const ulang = await ambilHalaman(halTerakhir);
+      if (!ulang.error) {
+        page = halTerakhir;
+        data = ulang.data;
+        count = ulang.count;
+        error = null;
+      }
+    }
+
+    // Masih 416 (mis. tidak ada data sama sekali) -> kunci jawaban kosong.
+    if (error) {
+      return { keys: [], total: 0, page, perHalaman, totalHalaman: 1 };
+    }
+  }
+
+  if (error) throw new Error(`Gagal memuat key: ${error.message}`);
+
+  const total = count ?? 0;
+  return {
+    keys: (data ?? []) as Key[],
+    total,
+    page,
+    perHalaman,
+    totalHalaman: Math.max(1, Math.ceil(total / perHalaman)),
+  };
+});

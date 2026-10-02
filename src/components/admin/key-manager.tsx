@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Ban, CheckCircle2, Copy, Search, ShieldAlert } from 'lucide-react';
 
 import { Button, IconButton } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import {
 import { useToast } from '@/components/ui/toast';
 import { rupiah, tanggalWaktu } from '@/lib/format';
 import { LICENSE_TYPE_LABEL, PAKET_LABEL } from '@/lib/tier';
+import { useDebounce } from '@/lib/useDebounce';
 import type { Key } from '@/types';
 
 /**
@@ -45,33 +46,62 @@ const FILTER_STATUS = [
 
 type FilterStatus = (typeof FILTER_STATUS)[number]['nilai'];
 
-export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
+export function KeyManager({
+  keys,
+  total,
+  page,
+  perHalaman,
+  totalHalaman,
+  q,
+  status,
+}: {
+  keys: Key[];
+  total: number;
+  page: number;
+  perHalaman: number;
+  totalHalaman: number;
+  q: string;
+  status: FilterStatus;
+}) {
   const router = useRouter();
   const toast = useToast();
+  const sp = useSearchParams();
+  const [menunggu, mulaiTransition] = React.useTransition();
 
-  const [cari, setCari] = React.useState('');
-  const [status, setStatus] = React.useState<FilterStatus>('semua');
   const [konfirmasi, setKonfirmasi] = React.useState<Key | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const terfilter = React.useMemo(() => {
-    const q = cari.trim().toLowerCase();
-    return keys.filter((k) => {
-      if (status !== 'semua' && k.status !== status) return false;
-      if (!q) return true;
-      return [
-        k.serial_key,
-        k.nama_pembeli,
-        k.nama_toko ?? '',
-        k.telepon ?? '',
-        k.alamat_pembeli ?? '',
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [keys, cari, status]);
+  // Teks di kotak pencarian sengaja dipisah dari `q` (yang sudah hasil filter
+  // server). Kalau tidak, tiap selesai debounce teks ketikan ikut terkirim ke
+  // server dan courses-nya melompat-lompat.
+  const [cari, setCari] = React.useState(q);
+  const cariDebounce = useDebounce(cari, 500);
+
+  // Ikuti URL kalau user Back/Forward atau menekan tombol filter.
+  React.useEffect(() => setCari(q), [q]);
+
+  /** Bikin URL baru tanpa kehilangan filter lain; halaman selalu balik ke 1. */
+  function navigasi(next: { q?: string; status?: string; page?: number }) {
+    const p = new URLSearchParams(sp.toString());
+    if (next.q !== undefined) p.set('q', next.q);
+    if (next.status !== undefined) p.set('status', next.status);
+    p.delete('page');
+    if (next.page && next.page > 1) p.set('page', String(next.page));
+    const qs = p.toString();
+    mulaiTransition(() => router.replace(qs ? `/keys?${qs}` : '/keys', { scroll: false }));
+  }
+
+  // Efek terpisah dari hook debounce: hook cuma menunda nilai, hook tidak
+  // boleh punya efek samping.
+  const qTerakhir = React.useRef(q);
+  React.useEffect(() => {
+    const bersih = cariDebounce.trim();
+    if (bersih === qTerakhir.current) return;
+    qTerakhir.current = bersih;
+    navigasi({ q: bersih });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cariDebounce]);
 
   async function ubahStatus(key: Key, baru: Key['status']) {
     if (busy) return;
@@ -176,13 +206,20 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
             className="pl-9"
             aria-label="Cari key"
           />
+          {/*Spinner kecil hanya selama query baru dijalankan — teks tetap bisa diketik. */}
+          {menunggu ? (
+            <span
+              aria-hidden
+              className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700"
+            />
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {FILTER_STATUS.map((f) => (
             <button
               key={f.nilai}
               type="button"
-              onClick={() => setStatus(f.nilai)}
+              onClick={() => navigasi({ status: f.nilai })}
               className={`touch-chip ${
                 status === f.nilai
                   ? 'bg-zinc-900 text-white'
@@ -196,8 +233,10 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
       </div>
 
       <p className="mb-2 text-[12px] text-zinc-500">
-        Menampilkan {terfilter.length} dari {total} key
-        {total > keys.length ? ` (data terbaru ${keys.length}, naik halaman untuk sisanya)` : ''}
+        {total === 0
+          ? 'Tidak ada key'
+          : `Menampilkan ${(page - 1) * perHalaman + 1}–${Math.min(page * perHalaman, total)} dari ${total} key`}
+        {q ? ` untuk "${q}"` : ''}
       </p>
 
       {error ? (
@@ -206,7 +245,7 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
         </div>
       ) : null}
 
-      {terfilter.length === 0 ? (
+      {keys.length === 0 ? (
         <EmptyState
           title={cari || status !== 'semua' ? 'Tidak ada key yang cocok' : 'Belum ada key'}
           description={
@@ -221,7 +260,8 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
                 size="sm"
                 onClick={() => {
                   setCari('');
-                  setStatus('semua');
+                  qTerakhir.current = '';
+                  navigasi({ q: '', status: 'semua' });
                 }}
               >
                 Reset filter
@@ -245,7 +285,7 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {terfilter.map((k) => (
+            {keys.map((k) => (
               <tr key={k.id} className="transition hover:bg-zinc-50/70">
                 <Td>
                   {selKey(k)}
@@ -292,9 +332,9 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
       )}
 
       {/* Tampilan HP: kartu satu per key — tanpa scroll horizontal. */}
-      {terfilter.length > 0 ? (
+      {keys.length > 0 ? (
         <TableCards>
-          {terfilter.map((k) => (
+          {keys.map((k) => (
             <CardItem key={k.id}>
               <CardHeader
                 title={<span className="font-mono">{k.serial_key}</span>}
@@ -335,6 +375,34 @@ export function KeyManager({ keys, total }: { keys: Key[]; total: number }) {
             </CardItem>
           ))}
         </TableCards>
+      ) : null}
+
+      {/* Navigasi halaman — disembunyikan kalau hasilnya muat satu halaman. */}
+      {keys.length > 0 && totalHalaman > 1 ? (
+        <nav
+          aria-label="Navigasi halaman key"
+          className="mt-3 flex items-center justify-between gap-2 border-t border-zinc-100 pt-3"
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1 || menunggu}
+            onClick={() => navigasi({ page: page - 1 })}
+          >
+            Sebelumnya
+          </Button>
+          <span className="text-[12.5px] text-zinc-500">
+            Halaman {page} dari {totalHalaman}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalHalaman || menunggu}
+            onClick={() => navigasi({ page: page + 1 })}
+          >
+            Berikutnya
+          </Button>
+        </nav>
       ) : null}
 
       {/* Konfirmasi revoke / blokir */}

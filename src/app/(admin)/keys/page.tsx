@@ -2,37 +2,66 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { KeyManager } from '@/components/admin/key-manager';
-import { getKeys } from '@/lib/data';
-import { rupiah } from '@/lib/format';
+import { getKeys, getRingkasanKey } from '@/lib/data';
 import { requireAdmin } from '@/lib/supabase/guard';
+import type { LicenseStatus } from '@/types';
 
 export const metadata: Metadata = { title: 'Manajemen Serial Key' };
 export const dynamic = 'force-dynamic';
 
-/** Batas baris yang dimuat per halaman — Sisanya bisa dicari via filter/limit. */
-const BATAS = 500;
+/** Status yang boleh muncul di URL. Selain itu diabaikan (bukan error 500). */
+const STATUS_VALID: LicenseStatus[] = ['unused', 'active', 'blocked', 'revoked'];
 
-export default async function KeysPage() {
+/**(searchParams) selalu string|string[]|undefined — ebook jadi string di sini. */
+function satu(nilai: string | string[] | undefined): string {
+  if (Array.isArray(nilai)) return nilai[0] ?? '';
+  return nilai ?? '';
+}
+
+export default async function KeysPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined };
+}) {
   const auth = await requireAdmin();
   if (!auth.ok) redirect('/login');
 
-  const { keys, total } = await getKeys(BATAS);
-  const komisiTotal = keys.reduce((s, k) => s + (k.komisi ?? 0), 0);
-  const aktifCount = keys.filter((k) => k.status === 'active').length;
-  const belumCount = keys.filter((k) => k.status === 'unused').length;
-  const dicabutCount = keys.filter((k) => k.status === 'revoked').length;
+  // Semua filter datang dari URL, bukan dari state di browser. Keuntungannya:
+  // hasil filter bisa di-share, di-back, dan di-refresh tanpa kehilangan.
+  const q = satu(searchParams.q).slice(0, 80);
+  const statusParam = satu(searchParams.status);
+  const status = (STATUS_VALID.find((s) => s === statusParam) ?? 'semua') as LicenseStatus | 'semua';
+  const pageRaw = Number.parseInt(satu(searchParams.page), 10);
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+
+  // `getKeys` sudah meng-clamp nomor halaman ke halaman terakhir yang ada
+  // datanya, jadi `?page=99` aman dan tidak perlu `redirect()` di sini.
+  // Jangan menambahkan `redirect()`: halaman ini punya `loading.tsx`, jadi
+  // Next mulai streaming lebih dulu dan `redirect()` tidak bisa mengirim 307.
+  const [{ keys, total, page: hal, perHalaman, totalHalaman }, ringkasan] = await Promise.all([
+    getKeys({ q, status, page }),
+    getRingkasanKey(),
+  ]);
 
   return (
     <div className="space-y-4">
       {/* Judul halaman sudah ada di app bar, jadi di sini cukup ringkasan. */}
       <header>
         <p className="text-[13px] text-zinc-500">
-          {total} key dari semua toko · {aktifCount} aktif · {belumCount} belum dipakai ·{' '}
-          {dicabutCount} dicabut · komisi total {rupiah(komisiTotal)}
+          {total} key dari semua toko · {ringkasan.active} aktif · {ringkasan.unused} belum
+          dipakai · {ringkasan.revoked} dicabut
         </p>
       </header>
 
-      <KeyManager keys={keys} total={total} />
+      <KeyManager
+        keys={keys}
+        total={total}
+        page={hal}
+        perHalaman={perHalaman}
+        totalHalaman={totalHalaman}
+        q={q}
+        status={status}
+      />
     </div>
   );
 }
