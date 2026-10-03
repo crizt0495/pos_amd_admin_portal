@@ -50,7 +50,7 @@ export function AppShell({
           <JudulHalaman />
         </h1>
         {demo ? (
-          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10.5px] font-bold uppercase tracking-wide text-amber-800">
+          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[12px] font-bold uppercase tracking-wide text-amber-800">
             Demo
           </span>
         ) : null}

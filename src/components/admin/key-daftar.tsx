@@ -68,7 +68,7 @@ export function KeyDaftar({ keys }: { keys: Key[] }) {
               {k.hwid_locked ? (
                 // zinc-500 bukan zinc-400: teks kecil ini tampil penuh di HP
                 // dan zinc-400 hanya ~2,6:1 (gagal WCAG AA).
-                <p className="mt-0.5 text-[10.5px] text-zinc-500" title={k.hwid_locked}>
+                <p className="mt-0.5 text-[12px] text-zinc-500" title={k.hwid_locked}>
                   terkunci ke {k.device_name ?? 'perangkat'}
                 </p>
               ) : null}
@@ -91,7 +91,7 @@ export function KeyDaftar({ keys }: { keys: Key[] }) {
               )}
               {k.telepon ? (
                 // gray-500 bukan gray-400, alasan kontras sama seperti di atas.
-                <p className="tabular text-[11px] text-gray-500">{k.telepon}</p>
+                <p className="tabular text-[12px] text-gray-500">{k.telepon}</p>
               ) : null}
             </div>
 

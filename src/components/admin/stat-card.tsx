@@ -33,7 +33,7 @@ export function StatCard({ label, nilai, format = 'angka', sub, Icon, tone = 'ne
         {Icon ? <Icon className="h-4 w-4 shrink-0 text-zinc-300" /> : null}
       </div>
       <p className="tabular mt-2 text-[22px] font-bold leading-none text-zinc-900">{teks}</p>
-      {sub ? <p className="mt-1.5 text-[11.5px] text-zinc-500">{sub}</p> : null}
+      {sub ? <p className="mt-1.5 text-[12px] text-zinc-500">{sub}</p> : null}
     </div>
   );
 }

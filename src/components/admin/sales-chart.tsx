@@ -15,8 +15,10 @@ import type { SalesPoint } from '@/types';
 export function SalesChart({ data }: { data: SalesPoint[] }) {
   const W = 640;
   const H = 200;
-  const PADX = 28;
-  const PAD_TOP = 12;
+  const PADX = 34;
+  // ruang ekstra di atas: label nilai batang digambar 7px di atas puncak bar,
+  // jadi saat bar tertinggi, digits 12px pun tidak keluar dari viewBox.
+  const PAD_TOP = 20;
   const PAD_BOTTOM = 30;
   const tinggiPlot = H - PAD_TOP - PAD_BOTTOM;
 
@@ -55,13 +57,7 @@ export function SalesChart({ data }: { data: SalesPoint[] }) {
                 strokeWidth={1}
                 strokeDasharray={f === 0 ? undefined : '3 3'}
               />
-              <text
-                x={PADX - 6}
-                y={y + 3.5}
-                textAnchor="end"
-                fontSize={9}
-                fill="#a1a1aa"
-              >
+              <text x={PADX - 6} y={y + 3.5} textAnchor="end" fontSize={12} fill="#a1a1aa">
                 {Math.round(maksJumlah * f)}
               </text>
             </g>
@@ -88,22 +84,16 @@ export function SalesChart({ data }: { data: SalesPoint[] }) {
               {d.jumlah > 0 ? (
                 <text
                   x={cx}
-                  y={y - 5}
+                  y={y - 7}
                   textAnchor="middle"
-                  fontSize={10}
+                  fontSize={12}
                   fontWeight={700}
                   fill="#18181b"
                 >
                   {d.jumlah}
                 </text>
               ) : null}
-              <text
-                x={cx}
-                y={H - 10}
-                textAnchor="middle"
-                fontSize={10}
-                fill="#71717a"
-              >
+              <text x={cx} y={H - 10} textAnchor="middle" fontSize={12} fill="#71717a">
                 {d.label}
               </text>
             </g>
@@ -139,7 +129,7 @@ export function SalesChart({ data }: { data: SalesPoint[] }) {
       </svg>
 
       {/* legenda */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11.5px] text-zinc-500">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-zinc-500">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-sm bg-zinc-900" />
           Key terjual

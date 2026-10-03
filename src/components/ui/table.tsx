@@ -73,7 +73,7 @@ export function ListHeadCell({
   className?: string;
 }) {
   return (
-    <span className={cn('text-[11px] font-bold uppercase tracking-wide text-zinc-500', className)}>
+    <span className={cn('text-[12px] font-bold uppercase tracking-wide text-zinc-500', className)}>
       {children}
     </span>
   );

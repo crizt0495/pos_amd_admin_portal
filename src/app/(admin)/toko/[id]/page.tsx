@@ -83,7 +83,7 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
             {store.sisa_kuota} key
           </p>
           {store.sisa_kuota <= 0 ? (
-            <p className="mt-1.5 text-[11.5px] font-semibold text-red-600">
+            <p className="mt-1.5 text-[12px] font-semibold text-red-600">
               Habis — toko tidak bisa generate key
             </p>
           ) : null}
@@ -242,7 +242,7 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
                     {t.jumlah >= 0 ? '+' : ''}
                     {angka(t.jumlah)} key → sisa {angka(t.sisa_quota)}
                   </p>
-                  <p className="truncate text-[11.5px] text-zinc-500">
+                  <p className="truncate text-[12px] text-zinc-500">
                     {t.admin_by ?? 'admin'} · {sejak(t.created_at)}
                     {t.catatan ? ` · ${t.catatan}` : ''}
                   </p>

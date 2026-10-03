@@ -156,7 +156,7 @@ export function AccountMenu({ email, demo = false }: { email: string; demo?: boo
           </div>
 
           {demo ? (
-            <p className="mx-1.5 mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold leading-snug text-amber-900">
+            <p className="mx-1.5 mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[12px] font-semibold leading-snug text-amber-900">
               Mode demo — data palsunya.
             </p>
           ) : null}

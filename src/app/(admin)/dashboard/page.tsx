@@ -90,7 +90,7 @@ export default async function DashboardPage() {
                     <TierBadge tier={s.tier} />
                     <StoreStatusBadge aktif={s.is_active} />
                   </div>
-                  <span className="hidden shrink-0 text-[11.5px] text-zinc-500 sm:block">
+                  <span className="hidden shrink-0 text-[12px] text-zinc-500 sm:block">
                     {sejak(s.created_at)}
                   </span>
                 </Link>
@@ -101,7 +101,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* zinc-500 bukan zinc-400: teks kecil di atas putih butuh rasio >= 4,5:1. */}
-      <p className="text-center text-[11.5px] text-zinc-500">
+      <p className="text-center text-[12px] text-zinc-500">
         Data diperbarui tiap kali halaman dimuat · {tanggalPendek(new Date())}
       </p>
     </div>

@@ -291,7 +291,7 @@ export function StoreManager({ stores }: { stores: Store[] }) {
                   >
                     {s.nama_toko}
                   </Link>
-                  <p className="text-[11px] text-zinc-500">daftar {sejak(s.created_at)}</p>
+                  <p className="text-[12px] text-zinc-500">daftar {sejak(s.created_at)}</p>
                 </ListCell>
 
                 {/* 3 — Email akun */}
