@@ -79,3 +79,8 @@ export function KeyListSkeleton({ rows = 5 }: { rows?: number }) {
     </>
   );
 }
+
+/** Kerangka daftar toko untuk halaman /toko. */
+export function StoreListSkeleton({ rows = 5 }: { rows?: number }) {
+  return <TableSkeleton rows={rows} cols={10} />;
+}

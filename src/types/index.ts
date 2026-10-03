@@ -34,6 +34,27 @@ export interface Store {
   updated_at: string;
 }
 
+/**
+ * Subset baris toko yang boleh menyeberang ke Client Component (island).
+ *
+ * Setiap kolom di bawah ini memang dipakai oleh UI island (`StoreAksi` dan
+ * `PilihSemua`). Field lain (user_id, username, komisi_total, status) tidak
+ * pernah dilihat di klien, jadi dilarang menyeberang: kalau nanti kolom baru
+ * ditambah, TypeScript akan menolak build alih-alih diam-diam ikut
+ * ter-serialize.
+ */
+export type StoreRowData = Pick<
+  Store,
+  | 'id'
+  | 'nama_toko'
+  | 'email'
+  | 'no_hp'
+  | 'alamat'
+  | 'total_terjual'
+  | 'sisa_kuota'
+  | 'is_active'
+>;
+
 /** Satu baris view `admin_keys` (= satu serial key global). */
 export interface Key {
   id: string;

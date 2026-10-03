@@ -156,6 +156,112 @@ export const getStores = cache(async (limit = 500): Promise<Store[]> => {
   return (data ?? []) as Store[];
 });
 
+/** Kolom yang boleh dicari dari kotak "Cari toko". */
+const KOLOM_CARI_STORE = ['nama_toko', 'email', 'no_hp', 'alamat', 'tier'] as const;
+
+export type ParamsToko = {
+  q?: string;
+  page?: number;
+  perPage?: number;
+};
+
+export type HasilToko = {
+  stores: Store[];
+  total: number;
+  page: number;
+  perHalaman: number;
+  totalHalaman: number;
+};
+
+/**
+ * Daftar toko untuk halaman /toko — dengan pencarian + paginasi.
+ *
+ * Mirip `getKeys`: filter & paging dikerjakan DI SERVER lewat URL, jadi baris
+ * yang ditampilkan di-hydrate sekecil mungkin dan URL bisa di-share. Pencarian
+ * memakai `ilike` (tanpa kasus) di 5 kolom; `q` dibersihkan dulu lewat
+ * `bersihkanCari` supaya tidak mengubah struktur query PostgREST.
+ */
+export const getStoresPaged = cache(async (params: ParamsToko = {}): Promise<HasilToko> => {
+  await wajibAdmin();
+
+  const perHalaman = Math.min(Math.max(Math.trunc(params.perPage ?? PER_HALAMAN), 1), 50);
+  let page = Math.max(1, Math.trunc(params.page ?? 1));
+  const q = bersihkanCari(params.q ?? '');
+
+  if (demoAktif) {
+    const semua = demoStores().filter((s) => {
+      if (!q) return true;
+      return KOLOM_CARI_STORE.some((c) =>
+        String(s[c] ?? '').toLowerCase().includes(q.toLowerCase()),
+      );
+    });
+    const totalHalaman = Math.max(1, Math.ceil(semua.length / perHalaman));
+    page = Math.min(page, totalHalaman);
+    const dari = (page - 1) * perHalaman;
+    return {
+      stores: semua.slice(dari, dari + perHalaman),
+      total: semua.length,
+      page,
+      perHalaman,
+      totalHalaman,
+    };
+  }
+
+  const db = createAdminClient();
+
+  // Filter pencarian dipasang kondisional: `.or()` dengan nilai kosong akan
+  // menambah klausa yang tidak kita mau (mis. `nama_toko=ilike.%`).
+  const ambilHalaman = (hal: number) => {
+    let qy = db
+      .from('admin_stores')
+      .select(KOLOM_STORE, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range((hal - 1) * perHalaman, hal * perHalaman - 1);
+    if (q) qy = qy.or(KOLOM_CARI_STORE.map((c) => `${c}.ilike.%${q}%`).join(','));
+    return qy;
+  };
+
+  let { data, error, count } = await ambilHalaman(page);
+
+  // PostgREST menjawab HTTP 416 kalau halaman melewati baris terakhir (mis.
+  // ?page=99 di URL, atau jumlah toko menyusut). Kondisi normal, bukan error —
+  // kita klem ke halaman terakhir yang benar-benar berisi data. Clamp dilakukan
+  // di lapisan data (bukan `redirect()` di page) karena halaman punya
+  // `loading.tsx`, jadi streaming sudah mulai dan header terkirim duluan.
+  if (error && /range not satisfiable/i.test(error.message)) {
+    let hitung = db.from('admin_stores').select('id', { count: 'exact', head: true });
+    if (q) hitung = hitung.or(KOLOM_CARI_STORE.map((c) => `${c}.ilike.%${q}%`).join(','));
+
+    const totalHitung = (await hitung).count ?? 0;
+    const halTerakhir = Math.max(1, Math.ceil(totalHitung / perHalaman));
+
+    if (halTerakhir < page) {
+      const ulang = await ambilHalaman(halTerakhir);
+      if (!ulang.error) {
+        page = halTerakhir;
+        data = ulang.data;
+        count = ulang.count;
+        error = null;
+      }
+    }
+
+    if (error) {
+      return { stores: [], total: 0, page, perHalaman, totalHalaman: 1 };
+    }
+  }
+
+  if (error) throw new Error(`Gagal memuat toko: ${error.message}`);
+
+  const total = count ?? 0;
+  return {
+    stores: (data ?? []) as Store[],
+    total,
+    page,
+    perHalaman,
+    totalHalaman: Math.max(1, Math.ceil(total / perHalaman)),
+  };
+});
+
 /** Satu toko + riwayat top up-nya. */
 export const getStoreDetail = cache(async (id: string): Promise<{
   store: Store | null;
