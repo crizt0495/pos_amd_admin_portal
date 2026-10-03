@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-import { demoAktif, KOOKIE_DEMO } from '@/lib/demo/config';
+import { demoAktif, KOOKIE_DEMO, DEMO_PASSWORD, DEMO_USERNAME } from '@/lib/demo/config';
 import { env } from '@/lib/env';
+import { loginHtml } from '@/lib/login-html';
 
 /**
  * =============================================================================
@@ -30,6 +31,35 @@ function terProteksi(pathname: string): boolean {
   return PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/**
+ * Dokumen login mandiri (nol React, nol chunk JS, CSS inlined).
+ *
+ * Header `no-store` tetap dipasang: halaman ini menulis `?error=` dan
+ * `?next=` di URL, dan respons-nya harus selalu mencerminkan build yang sedang
+ * berjalan. Halaman ini terlalu kecil (HTML ~4 kB, 0 kB JS) sehingga
+ * `no-store` tidak menimbulkan biaya nyata — tidak ada permintaan kedua.
+ */
+function halamanLogin(): Response {
+  return new NextResponse(
+    loginHtml({
+      appName: env.appName,
+      description: env.description,
+      demo: demoAktif,
+      demoUser: DEMO_USERNAME,
+      demoPass: DEMO_PASSWORD,
+    }),
+    {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'private, no-store, max-age=0',
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'same-origin',
+      },
+    },
+  );
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -49,34 +79,34 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (sudahLogin && PUBLIK.includes(pathname)) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/dashboard';
-      url.search = '';
-      return NextResponse.redirect(url);
+    if (PUBLIK.includes(pathname)) {
+      // Sudah punya sesi -> jangan perlakukan sebagai dokumen biasa.
+      if (sudahLogin) {
+        const url = req.nextUrl.clone();
+        url.pathname = '/dashboard';
+        url.search = '';
+        return NextResponse.redirect(url);
+      }
+      return halamanLogin();
     }
 
     return response;
   }
 
-  const supabase = createServerClient(
-    env.supabaseUrl,
-    env.supabaseAnonKey || 'public-anon-key',
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
-          response = NextResponse.next({ request: { headers: req.headers } });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options as never),
-          );
-        },
+  const supabase = createServerClient(env.supabaseUrl, env.supabaseAnonKey || 'public-anon-key', {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+        cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+        response = NextResponse.next({ request: { headers: req.headers } });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options as never),
+        );
       },
     },
-  );
+  });
 
   // Tanpa jaringan: decode cookie sesi (JWT) untuk cek login & refresh token
   // kedaluwarsa (± tiap 1 jam). Kalau tidak ada cookie sama sekali, nol jaringan.
@@ -91,11 +121,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (session && PUBLIK.includes(pathname)) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/dashboard';
-    url.search = '';
-    return NextResponse.redirect(url);
+  if (PUBLIK.includes(pathname)) {
+    // `getSession()` di atas sudah selesai: kalau ada sesi, aksesnya tetap
+    // divalidasi ulang oleh `requireAdmin()` di tiap halaman admin.
+    if (session) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/dashboard';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+    return halamanLogin();
   }
 
   return response;

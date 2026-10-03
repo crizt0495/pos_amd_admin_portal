@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/stores — daftarkan toko baru BESERTa akun loginnyа.
+ * POST /api/stores — daftarkan toko baru BESERTa akun loginnya.
  *
  * Sekaligus dua hal, dalam urutan ini:
  *  1. `auth.admin.createUser()`  -> akun Supabase Auth (bisa langsung login)

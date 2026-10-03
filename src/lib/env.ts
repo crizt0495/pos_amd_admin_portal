@@ -66,6 +66,19 @@ export const env = {
   get appName() {
     return process.env.NEXT_PUBLIC_APP_NAME || 'KasirPro Admin';
   },
+  /**
+   * Deskripsi situs untuk `<meta name="description">`.
+   *
+   * Disimpan di sini, bukan ditulis literal di dua tempat, karena `/login`
+   * sekarang disajikan sebagai HTML mandiri oleh middleware — bukan lewat
+   * `metadata` root layout. Dengan begitu kedua halaman tidak bisa berbeda.
+   */
+  get description() {
+    return (
+      process.env.NEXT_PUBLIC_APP_DESCRIPTION ||
+      'Panel super admin KasirPro: kelola toko, kuota key, serial key global, dan komisi.'
+    );
+  },
 };
 
 /** True bila env Supabase dasar terisi (belum cek kunci service role). */
@@ -88,8 +101,6 @@ export const PESAN_ENV_BELUM_DIISI =
  */
 export function isSupabaseFullyConfigured(): boolean {
   return (
-    isSupabaseConfigured() &&
-    Boolean(env.serviceRoleKey) &&
-    !env.serviceRoleKey.includes('xxxx')
+    isSupabaseConfigured() && Boolean(env.serviceRoleKey) && !env.serviceRoleKey.includes('xxxx')
   );
 }

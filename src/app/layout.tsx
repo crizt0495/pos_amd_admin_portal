@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     default: env.appName,
     template: `%s — ${env.appName}`,
   },
-  description: 'Panel super admin KasirPro: kelola toko, kuota key, serial key global, dan komisi.',
+  description: env.description,
   applicationName: env.appName,
   // Panel admin tidak pernah boleh di-index mesin pencari.
   robots: { index: false, follow: false, nocache: true },

@@ -25,13 +25,29 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Panel admin: jangan pernah di-cache oleh CDN/proxy.
-        source: '/:path*',
+        /*
+         * Aset statis: boleh di-cache lama & keras.
+         *
+         * PENTING: aturan `no-store` di bawah memakai `source: '/:path*'`, yang
+         * di Next/Vercel juga mencocokkan `/icon.svg` dan `/manifest.webmanifest`.
+         * Tanpa pengecualian ini, favicon ikut terkirim ulang tiap muat halaman
+         * (terukur `private, no-store, max-age=0`). Hash aset di `/_next/static`
+         * sudah immutable dari sisi Next, tapi `/public/*` tidak.
+         */
+        source: '/:path((?!_next/static|icon.svg|manifest.webmanifest|robots.txt|favicon.ico).*)',
         headers: [
           { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'same-origin' },
+        ],
+      },
+      {
+        // Aset dari `public/` yang namanya stabil (tanpa hash) — cache sebentar,
+        // cukup supaya tidak di-download ulang pada tiap navigasi.
+        source: '/icon.svg',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=604800, stale-while-revalidate=86400' },
         ],
       },
     ];
