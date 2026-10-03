@@ -199,6 +199,38 @@
     @apply whitespace-nowrap px-3 py-3 text-[13px] text-zinc-700;
   }
 
+  /* ------------------------------------------------------------------
+     SEL DAFTAR RESPONSIF (`ListCell`)
+
+     Satu elemen per sel, dan label kolomnya TIDAK PERNAH masuk DOM. Di HP
+     label dimunculkan oleh `::before` + `content: attr(data-label)`; di
+     `lg:` ke atas `::before` disembunyikan karena baris tabel sudah punya
+     judul kolom.
+
+     Aturannya diletakkan di sini, bukan sebagai kelas utilitas Tailwind
+     yang panjang di JSX: string `before:*` itu keluar apa adanya di HTML
+     untuk tiap sel (30 sel × 6-9 baris per halaman), dan sempat membuat
+     payload HTML /keys naik 114,7 KB -> 125,2 KB meskipun hemat node
+     DOM. Dengan kelas singkat, hematnya jadi dua-duanya.
+
+     `zinc-500` untuk label, bukan `zinc-400`: label ini benar-benar terlihat
+     di HP, dan `zinc-400` di atas putih hanya ~2,6:1 (gagal WCAG AA).
+     ------------------------------------------------------------------ */
+  .list-cell {
+    @apply mt-2.5 min-w-0 lg:mt-0;
+  }
+
+  .list-cell::before {
+    content: attr(data-label);
+    @apply mb-0.5 block text-[10.5px] font-bold uppercase tracking-wide text-zinc-500;
+  }
+
+  @media (min-width: 1024px) {
+    .list-cell::before {
+      content: none;
+    }
+  }
+
   /* Daftar kartu — padanan tabel untuk layar kecil (mobile-first). */
   .card-list {
     @apply space-y-2.5 lg:hidden;

@@ -22,16 +22,12 @@ import { Field, Input, InputTelepon, Textarea } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
 import {
   AlertBox,
-  CardActions,
-  CardBadges,
-  CardField,
-  CardHeader,
-  CardItem,
   EmptyState,
-  TableCards,
-  TableWrap,
-  Td,
-  Th,
+  ListCell,
+  ListHead,
+  ListHeadCell,
+  ListRow,
+  ListShell,
 } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { sejak } from '@/lib/format';
@@ -54,6 +50,17 @@ type Dialog =
   | { kind: 'hapus'; store: Store }
   | { kind: 'bulk' }
   | null;
+
+/**
+ * Template kolom `lg:` untuk daftar toko — dipakai PERSIS sama oleh
+ * `ListHead` dan `ListRow` supaya judul kolom dan isi selalu sejajar.
+ * Di bawah `lg` template ini diabaikan: tiap sel jadi blok bertumpuk
+ * dengan `ListLabel`.
+ *
+ * Urutannya harus sama dengan urutan sel di dalam `ListRow`.
+ */
+const GRID_TOKO =
+  'lg:grid-cols-[34px_minmax(140px,1.2fr)_minmax(148px,1.2fr)_minmax(104px,.75fr)_minmax(148px,1.15fr)_minmax(80px,.55fr)_minmax(70px,.5fr)_minmax(96px,.65fr)_minmax(96px,.65fr)_minmax(78px,auto)]';
 
 export function StoreManager({ stores }: { stores: Store[] }) {
   const router = useRouter();
@@ -122,7 +129,10 @@ export function StoreManager({ stores }: { stores: Store[] }) {
         >
           <KeyRound className="h-4 w-4" />
         </IconButton>
-        <IconButton label={`Edit ${s.nama_toko}`} onClick={() => setDialog({ kind: 'edit', store: s })}>
+        <IconButton
+          label={`Edit ${s.nama_toko}`}
+          onClick={() => setDialog({ kind: 'edit', store: s })}
+        >
           <Pencil className="h-4 w-4" />
         </IconButton>
         <IconButton
@@ -237,26 +247,44 @@ export function StoreManager({ stores }: { stores: Store[] }) {
           }
         />
       ) : (
-        <TableWrap>
-          <thead>
-            <tr>
-              <Th className="w-9">{checkboxSemua}</Th>
-              <Th>Nama Toko</Th>
-              <Th>Email Akun</Th>
-              <Th>No HP</Th>
-              <Th>Alamat</Th>
-              <Th>Tier</Th>
-              <Th className="text-right">Terjual</Th>
-              <Th className="text-right">Sisa Kuota</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Aksi</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
+        /*
+         * SATU markup untuk HP & desktop — pola yang sama dengan /keys.
+         *
+         * Sebelumnya <TableWrap> (tabel, `hidden` di bawah `lg`) DAN
+         * `TableCards` (kartu, `lg:hidden`) dirender BERBARENGAN. CSS
+         * `display:none` tidak menghentikan React untuk merender,
+         * hydrate, dan menghitung ulang gaya — jadi setiap toko ter-render
+         * DUA kali. Akibatnya payload HTML /toko 103 KB dan TBT 349 ms.
+         *
+         * Sekarang cukup satu `<ul>`: `lg:grid-cols-*` yang mengubahnya
+         * dari kartu bertumpuk jadi baris tabel 10 kolom. Nol duplikasi DOM,
+         * CLS tetap 0, semua kolom tetap tampil di kedua ukuran.
+         */
+        <ListShell>
+          <ListHead gridClass={GRID_TOKO}>
+            {/* Checkbox tidak dibungkus ListHeadCell: sel itu bukan teks
+                judul, dan `uppercase`/tracking milik ListHeadCell tidak
+                relevan untuk checkbox. */}
+            <span className="flex items-center">{checkboxSemua}</span>
+            <ListHeadCell>Nama Toko</ListHeadCell>
+            <ListHeadCell>Email Akun</ListHeadCell>
+            <ListHeadCell>No HP</ListHeadCell>
+            <ListHeadCell>Alamat</ListHeadCell>
+            <ListHeadCell>Tier</ListHeadCell>
+            <ListHeadCell className="text-right">Terjual</ListHeadCell>
+            <ListHeadCell className="text-right">Sisa Kuota</ListHeadCell>
+            <ListHeadCell>Status</ListHeadCell>
+            <ListHeadCell className="text-right">Aksi</ListHeadCell>
+          </ListHead>
+
+          <ul className="divide-y divide-zinc-100">
             {terfilter.map((s) => (
-              <tr key={s.id} className="transition hover:bg-zinc-50/70">
-                <Td>{checkbox(s)}</Td>
-                <Td>
+              <ListRow key={s.id} gridClass={GRID_TOKO}>
+                {/* 1 — centang */}
+                <div className="flex items-center">{checkbox(s)}</div>
+
+                {/* 2 — Nama toko + tanggal daftar */}
+                <ListCell label="Nama Toko">
                   <Link
                     href={`/toko/${s.id}`}
                     className="font-semibold text-zinc-900 underline-offset-2 hover:underline"
@@ -264,71 +292,57 @@ export function StoreManager({ stores }: { stores: Store[] }) {
                     {s.nama_toko}
                   </Link>
                   <p className="text-[11px] text-zinc-500">daftar {sejak(s.created_at)}</p>
-                </Td>
-                <Td className="text-zinc-600">{s.email ?? '-'}</Td>
-                <Td className="tabular text-zinc-600">{s.no_hp ?? '-'}</Td>
-                <Td className="max-w-[200px] truncate text-zinc-600" title={s.alamat ?? ''}>
-                  {s.alamat ?? '-'}
-                </Td>
-                <Td>
-                  <TierBadge tier={s.tier} />
-                </Td>
-                <Td className="tabular text-right">{s.total_terjual}</Td>
-                <Td className="text-right">
-                  <KuotaBadge sisa={s.sisa_kuota} />
-                </Td>
-                <Td>
-                  <StoreStatusBadge aktif={s.is_active} />
-                </Td>
-                <Td>
-                  <div className="flex items-center justify-end gap-1">{aksiToko(s)}</div>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      )}
+                </ListCell>
 
-      {/* Tampilan HP: kartu satu per toko — tanpa scroll horizontal.
-          Render ulang karena tabel disembunyikan di bawah `lg`. */}
-      {terfilter.length > 0 ? (
-        <TableCards>
-          {terfilter.map((s) => (
-            <CardItem key={s.id}>
-              <CardHeader
-                right={checkbox(s)}
-                title={
-                  <Link
-                    href={`/toko/${s.id}`}
-                    className="underline-offset-2 hover:underline"
+                {/* 3 — Email akun */}
+                <ListCell label="Email Akun">
+                  <span className="text-zinc-600">{s.email ?? '-'}</span>
+                </ListCell>
+
+                {/* 4 — Nomor HP */}
+                <ListCell label="No HP">
+                  <span className="tabular text-zinc-600">{s.no_hp ?? '-'}</span>
+                </ListCell>
+
+                {/* 5 — Alamat */}
+                <ListCell label="Alamat">
+                  <span
+                    className="block max-w-[220px] truncate text-zinc-600"
+                    title={s.alamat ?? ''}
                   >
-                    {s.nama_toko}
-                  </Link>
-                }
-                subtitle={`daftar ${sejak(s.created_at)}`}
-              />
-              <div className="mt-2.5 space-y-1">
-                <CardField label="Email">{s.email ?? '-'}</CardField>
-                <CardField label="No HP">
-                  <span className="tabular">{s.no_hp ?? '-'}</span>
-                </CardField>
-                <CardField label="Alamat">{s.alamat ?? '-'}</CardField>
-                <CardField label="Terjual">
-                  <span className="tabular">{s.total_terjual}</span>
-                </CardField>
-                <CardField label="Sisa kuota">
+                    {s.alamat ?? '-'}
+                  </span>
+                </ListCell>
+
+                {/* 6 — Tier */}
+                <ListCell label="Tier">
+                  <TierBadge tier={s.tier} />
+                </ListCell>
+
+                {/* 7 — Terjual */}
+                <ListCell label="Terjual" className="tabular lg:text-right">
+                  <span>{s.total_terjual}</span>
+                </ListCell>
+
+                {/* 8 — Sisa kuota */}
+                <ListCell label="Sisa Kuota" className="lg:text-right">
                   <KuotaBadge sisa={s.sisa_kuota} />
-                </CardField>
-              </div>
-              <CardBadges>
-                <TierBadge tier={s.tier} />
-                <StoreStatusBadge aktif={s.is_active} />
-              </CardBadges>
-              <CardActions>{aksiToko(s)}</CardActions>
-            </CardItem>
-          ))}
-        </TableCards>
-      ) : null}
+                </ListCell>
+
+                {/* 9 — Status */}
+                <ListCell label="Status">
+                  <StoreStatusBadge aktif={s.is_active} />
+                </ListCell>
+
+                {/* 10 — Aksi */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 lg:mt-0 lg:justify-end">
+                  {aksiToko(s)}
+                </div>
+              </ListRow>
+            ))}
+          </ul>
+        </ListShell>
+      )}
 
       {/* ================= Dialog: Top Up ================= */}
       {dialog?.kind === 'topup' ? (
@@ -403,7 +417,9 @@ function TopupDialog({
 
   const n = Number(jumlah);
   const err = cekJumlahKey(n);
-  const hasilPreview = Number.isFinite(n) ? Math.max(0, store.sisa_kuota + Math.trunc(n)) : store.sisa_kuota;
+  const hasilPreview = Number.isFinite(n)
+    ? Math.max(0, store.sisa_kuota + Math.trunc(n))
+    : store.sisa_kuota;
 
   async function submit() {
     if (busy) return;
@@ -576,7 +592,12 @@ function BulkTopupDialog({
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
             Batal
           </Button>
-          <Button size="sm" onClick={submit} loading={busy} disabled={busy || !!err || stores.length === 0}>
+          <Button
+            size="sm"
+            onClick={submit}
+            loading={busy}
+            disabled={busy || !!err || stores.length === 0}
+          >
             <Layers className="h-3.5 w-3.5" />
             Terapkan ke {stores.length} toko
           </Button>
@@ -592,7 +613,9 @@ function BulkTopupDialog({
             {stores.map((s) => (
               <li key={s.id} className="truncate">
                 • {s.nama_toko}{' '}
-                <span className="text-zinc-500">(sisa {s.sisa_kuota} → {Math.max(0, s.sisa_kuota + Math.trunc(n || 0))})</span>
+                <span className="text-zinc-500">
+                  (sisa {s.sisa_kuota} → {Math.max(0, s.sisa_kuota + Math.trunc(n || 0))})
+                </span>
               </li>
             ))}
           </ul>
@@ -735,7 +758,12 @@ function EditDialog({
           />
         </Field>
 
-        <Field label="No HP" htmlFor="e-hp" error={fieldErrors.no_hp} hint="Hanya angka, diawali 08">
+        <Field
+          label="No HP"
+          htmlFor="e-hp"
+          error={fieldErrors.no_hp}
+          hint="Hanya angka, diawali 08"
+        >
           <InputTelepon
             id="e-hp"
             value={noHp}

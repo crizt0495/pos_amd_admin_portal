@@ -1,9 +1,4 @@
-'use client';
-
-import * as React from 'react';
-
-import { AccountMenu, AppNav, judulHalaman } from '@/components/admin/app-nav';
-import { usePathname } from 'next/navigation';
+import { AccountMenu, AppNav, JudulHalaman } from '@/components/admin/app-nav';
 
 /**
  * ============================================================================
@@ -21,7 +16,22 @@ import { usePathname } from 'next/navigation';
  *
  *  Semua elemen dalam flow, jadi tidak perlu padding kompensasi terhadap
  *  elemen `fixed`. `admin-content-safe` yang menyisakan ruang untuk bar bawah.
- * ============================================================================
+ *
+ *  ---------------------------------------------------------------------------
+ *  PENTING: file ini SENGAJA TIDAK punya `'use client'`.
+ *
+ *  Sebelumnya shell ini adalah Client Component karena memanggil
+ *  `usePathname()` untuk judul topbar. Konsekuensinya `{children}` — seluruh
+ *  isi halaman yang sudah dirender di server — berada di dalam output Client
+ *  Component, sehingga React ikut me-hydrate semuanya. Server Component tidak
+ *  otomatis bebas hydrasi hanya karena datanya sudah dikirim sebagai HTML;
+ *  yang menentukan adalah ada/tidaknya Client Component di atasnya.
+ *
+ *  Solusinya: judul dipindah ke island kecil `JudulHalaman`, sehingga shell
+ *  ini bisa jadi Server Component. `AppNav` dan `AccountMenu` tetap Client
+ *  Component, tapi sekarang mereka SAUDAR dari `{children}`, bukan pembungkus —
+ *  jadi konten halaman tidak lagi ikut ter-hydrate.
+ *  ---------------------------------------------------------------------------
  */
 export function AppShell({
   email,
@@ -32,14 +42,12 @@ export function AppShell({
   demo?: boolean;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
-
   return (
     <div className="admin-shell">
       {/* App bar */}
       <header className="admin-topbar">
         <h1 className="min-w-0 flex-1 truncate text-[17px] font-bold leading-none text-zinc-900">
-          {judulHalaman(pathname)}
+          <JudulHalaman />
         </h1>
         {demo ? (
           <span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10.5px] font-bold uppercase tracking-wide text-amber-800">

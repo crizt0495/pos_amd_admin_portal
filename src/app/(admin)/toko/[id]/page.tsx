@@ -1,15 +1,38 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, History, KeyRound, MapPin, Phone, Store as StoreIcon, Wallet } from 'lucide-react';
+import {
+  ArrowLeft,
+  History,
+  KeyRound,
+  MapPin,
+  Phone,
+  Store as StoreIcon,
+  Wallet,
+} from 'lucide-react';
 
 import { KeyStatusBadge, KuotaBadge, StoreStatusBadge, TierBadge } from '@/components/ui/badge';
-import { EmptyState, TableCards, TableWrap, CardBadges, CardField, CardHeader, CardItem, Td, Th } from '@/components/ui/table';
+import {
+  EmptyState,
+  ListCell,
+  ListHead,
+  ListHeadCell,
+  ListRow,
+  ListShell,
+} from '@/components/ui/table';
 import { TopupStoreButton } from '@/components/admin/topup-store-button';
 import { getStoreDetail } from '@/lib/data';
 import { angka, rupiah, sejak, tanggalWaktu } from '@/lib/format';
 import { LICENSE_TYPE_LABEL, PAKET_LABEL, tierRangeLabel, tierRule } from '@/lib/tier';
 import { requireAdmin } from '@/lib/supabase/guard';
+
+/**
+ * Template kolom `lg:` untuk daftar key milik toko ini — PERSIS sama antara
+ * `ListHead` dan `ListRow` supaya judul kolom dan isi sejajar. Di bawah `lg`
+ * diabaikan: tiap sel jadi blok bertumpuk dengan `ListLabel`.
+ */
+const GRID_KEY_TOKO =
+  'lg:grid-cols-[minmax(120px,1fr)_minmax(150px,1.3fr)_minmax(104px,.75fr)_minmax(90px,.6fr)_minmax(90px,.6fr)_minmax(100px,.7fr)_minmax(120px,.8fr)_minmax(96px,.65fr)]';
 
 export const metadata: Metadata = { title: 'Detail Toko' };
 export const dynamic = 'force-dynamic';
@@ -120,65 +143,75 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
           </div>
         ) : (
           <>
-            {/* Desktop: tabel penuh */}
-            <TableWrap>
-              <thead>
-                <tr>
-                  <Th>Serial Key</Th>
-                  <Th>Pembeli</Th>
-                  <Th>Telepon</Th>
-                  <Th>Paket</Th>
-                  <Th>Pilihan</Th>
-                  <Th className="text-right">Komisi</Th>
-                  <Th>Tanggal</Th>
-                  <Th>Status</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {keys.map((k) => (
-                  <tr key={k.id} className="transition hover:bg-zinc-50/70">
-                    <Td className="font-mono text-[12px] font-semibold text-zinc-900">
-                      {k.serial_key}
-                    </Td>
-                    <Td>{k.nama_pembeli}</Td>
-                    <Td className="tabular text-zinc-600">{k.telepon ?? '-'}</Td>
-                    <Td>{PAKET_LABEL[k.paket]}</Td>
-                    <Td>{LICENSE_TYPE_LABEL[k.pilihan]}</Td>
-                    <Td className="tabular text-right">{rupiah(k.komisi)}</Td>
-                    <Td className="text-zinc-600">{tanggalWaktu(k.created_at)}</Td>
-                    <Td>
-                      <KeyStatusBadge status={k.status} />
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableWrap>
+            <>
+              {/*
+               * SATU markup untuk HP & desktop — pola yang sama dengan /keys,
+               * /toko, dan /akun. Sebelumnya tabel + kartu dirender bersamaan
+               * lalu disembunyikan lewat CSS; `display:none` tidak menghentikan
+               * React merender + hydrate, jadi tiap key ter-render DUA kali.
+               */}
+              <ListShell>
+                <ListHead gridClass={GRID_KEY_TOKO}>
+                  <ListHeadCell>Serial Key</ListHeadCell>
+                  <ListHeadCell>Pembeli</ListHeadCell>
+                  <ListHeadCell>Telepon</ListHeadCell>
+                  <ListHeadCell>Paket</ListHeadCell>
+                  <ListHeadCell>Pilihan</ListHeadCell>
+                  <ListHeadCell className="text-right">Komisi</ListHeadCell>
+                  <ListHeadCell>Tanggal</ListHeadCell>
+                  <ListHeadCell>Status</ListHeadCell>
+                </ListHead>
 
-            {/* HP: kartu satu per key */}
-            <TableCards>
-              {keys.map((k) => (
-                <CardItem key={k.id}>
-                  <CardHeader
-                    title={<span className="font-mono">{k.serial_key}</span>}
-                    subtitle={tanggalWaktu(k.created_at)}
-                  />
-                  <div className="mt-2.5 space-y-1">
-                    <CardField label="Pembeli">{k.nama_pembeli}</CardField>
-                    <CardField label="Telepon">
-                      <span className="tabular">{k.telepon ?? '-'}</span>
-                    </CardField>
-                    <CardField label="Paket">{PAKET_LABEL[k.paket]}</CardField>
-                    <CardField label="Pilihan">{LICENSE_TYPE_LABEL[k.pilihan]}</CardField>
-                    <CardField label="Komisi">
-                      <span className="tabular">{rupiah(k.komisi)}</span>
-                    </CardField>
-                  </div>
-                  <CardBadges>
-                    <KeyStatusBadge status={k.status} />
-                  </CardBadges>
-                </CardItem>
-              ))}
-            </TableCards>
+                <ul className="divide-y divide-zinc-100">
+                  {keys.map((k) => (
+                    <ListRow key={k.id} gridClass={GRID_KEY_TOKO}>
+                      {/* 1 — Serial key */}
+                      <ListCell
+                        label="Serial Key"
+                        className="font-mono text-[12px] font-semibold text-zinc-900"
+                      >
+                        {k.serial_key}
+                      </ListCell>
+
+                      {/* 2 — Pembeli */}
+                      <ListCell label="Pembeli">
+                        <span>{k.nama_pembeli}</span>
+                      </ListCell>
+
+                      {/* 3 — Telepon */}
+                      <ListCell label="Telepon">
+                        <span className="tabular text-zinc-600">{k.telepon ?? '-'}</span>
+                      </ListCell>
+
+                      {/* 4 — Paket */}
+                      <ListCell label="Paket">
+                        <span>{PAKET_LABEL[k.paket]}</span>
+                      </ListCell>
+
+                      {/* 5 — Pilihan */}
+                      <ListCell label="Pilihan">
+                        <span>{LICENSE_TYPE_LABEL[k.pilihan]}</span>
+                      </ListCell>
+
+                      {/* 6 — Komisi */}
+                      <ListCell label="Komisi" className="tabular lg:text-right">
+                        <span>{rupiah(k.komisi)}</span>
+                      </ListCell>
+
+                      {/* 7 — Tanggal */}
+                      <ListCell label="Tanggal">
+                        <span className="text-zinc-600">{tanggalWaktu(k.created_at)}</span>
+                      </ListCell>
+
+                      {/* 8 — Status */}
+                      <ListCell label="Status">
+                        <KeyStatusBadge status={k.status} />
+                      </ListCell>
+                    </ListRow>
+                  ))}
+                </ul>
+              </ListShell>
+            </>
           </>
         )}
       </section>

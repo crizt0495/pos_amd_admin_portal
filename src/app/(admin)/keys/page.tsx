@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import { KeyManager } from '@/components/admin/key-manager';
+import { KeyDaftar } from '@/components/admin/key-daftar';
+import { KeyKosong, KeyPaginasi, KeyToolbar } from '@/components/admin/key-toolbar';
 import { getKeys, getRingkasanKey } from '@/lib/data';
 import { requireAdmin } from '@/lib/supabase/guard';
 import type { LicenseStatus } from '@/types';
@@ -16,7 +17,7 @@ export const revalidate = 0;
 /** Status yang boleh muncul di URL. Selain itu diabaikan (bukan error 500). */
 const STATUS_VALID: LicenseStatus[] = ['unused', 'active', 'blocked', 'revoked'];
 
-/**(searchParams) selalu string|string[]|undefined — ebook jadi string di sini. */
+/** (searchParams) selalu string|string[]|undefined — ebook jadi string di sini. */
 function satu(nilai: string | string[] | undefined): string {
   if (Array.isArray(nilai)) return nilai[0] ?? '';
   return nilai ?? '';
@@ -34,7 +35,8 @@ export default async function KeysPage({
   // hasil filter bisa di-share, di-back, dan di-refresh tanpa kehilangan.
   const q = satu(searchParams.q).slice(0, 80);
   const statusParam = satu(searchParams.status);
-  const status = (STATUS_VALID.find((s) => s === statusParam) ?? 'semua') as LicenseStatus | 'semua';
+  const status = (STATUS_VALID.find((s) => s === statusParam) ?? 'semua') as
+    LicenseStatus | 'semua';
   const pageRaw = Number.parseInt(satu(searchParams.page), 10);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
 
@@ -52,20 +54,33 @@ export default async function KeysPage({
       {/* Judul halaman sudah ada di app bar, jadi di sini cukup ringkasan. */}
       <header>
         <p className="text-[13px] text-zinc-500">
-          {total} key dari semua toko · {ringkasan.active} aktif · {ringkasan.unused} belum
-          dipakai · {ringkasan.revoked} dicabut
+          {total} key dari semua toko · {ringkasan.active} aktif · {ringkasan.unused} belum dipakai
+          · {ringkasan.revoked} dicabut
         </p>
       </header>
 
-      <KeyManager
-        keys={keys}
-        total={total}
-        page={hal}
-        perHalaman={perHalaman}
-        totalHalaman={totalHalaman}
-        q={q}
-        status={status}
-      />
+      {/*
+        Urutan di bawah itu disengaja: `KeyDaftar` adalah Server Component,
+        sedangkan `KeyToolbar`/`KeyPaginasi`/`KeyKosong` adalah island. Semua
+        ini SAUDAR, tidak ada island yang membungkus daftar — kalau dibungkus,
+        React akan hydrate daftar itu juga dan seluruhnya jadi sia-sia.
+      */}
+      <KeyToolbar q={q} status={status} />
+
+      <p className="text-[12px] text-zinc-500">
+        {total === 0
+          ? 'Tidak ada key'
+          : `Menampilkan ${(hal - 1) * perHalaman + 1}–${Math.min(hal * perHalaman, total)} dari ${total} key`}
+        {q ? ` untuk "${q}"` : ''}
+      </p>
+
+      {keys.length === 0 ? (
+        <KeyKosong adaFilter={Boolean(q) || status !== 'semua'} />
+      ) : (
+        <KeyDaftar keys={keys} />
+      )}
+
+      <KeyPaginasi page={hal} totalHalaman={totalHalaman} jumlah={keys.length} />
     </div>
   );
 }

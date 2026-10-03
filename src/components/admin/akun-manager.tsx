@@ -11,16 +11,12 @@ import { Field, Input } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
 import {
   AlertBox,
-  CardActions,
-  CardBadges,
-  CardField,
-  CardHeader,
-  CardItem,
   EmptyState,
-  TableCards,
-  TableWrap,
-  Td,
-  Th,
+  ListCell,
+  ListHead,
+  ListHeadCell,
+  ListRow,
+  ListShell,
 } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { cekJumlahKey, cekPassword } from '@/lib/validasi';
@@ -38,10 +34,15 @@ import type { Store } from '@/types';
  */
 
 type Dialog =
-  | { kind: 'reset-pw'; store: Store }
-  | { kind: 'topup'; store: Store }
-  | { kind: 'bulk' }
-  | null;
+  { kind: 'reset-pw'; store: Store } | { kind: 'topup'; store: Store } | { kind: 'bulk' } | null;
+
+/**
+ * Template kolom `lg:` untuk daftar akun — PERSIS sama antara `ListHead`
+ * dan `ListRow` supaya judul kolom dan isi sejajar. Di bawah `lg` diabaikan:
+ * tiap sel jadi blok bertumpuk dengan `ListLabel`.
+ */
+const GRID_AKUN =
+  'lg:grid-cols-[34px_minmax(140px,1.2fr)_minmax(148px,1.2fr)_minmax(104px,.75fr)_minmax(80px,.55fr)_minmax(70px,.5fr)_minmax(96px,.65fr)_minmax(104px,.7fr)_minmax(96px,.65fr)_minmax(78px,auto)]';
 
 export function AkunManager({ stores }: { stores: Store[] }) {
   const router = useRouter();
@@ -74,9 +75,7 @@ export function AkunManager({ stores }: { stores: Store[] }) {
   }
 
   function toggleSemua() {
-    setDipilih((prev) =>
-      semuaTerpilih ? new Set() : new Set(terfilter.map((s) => s.id)),
-    );
+    setDipilih((prev) => (semuaTerpilih ? new Set() : new Set(terfilter.map((s) => s.id))));
   }
 
   /** Aksi akun toko — dipakai baris tabel (desktop) & kartu (HP). */
@@ -144,16 +143,16 @@ export function AkunManager({ stores }: { stores: Store[] }) {
 
         {dipilih.size > 0 ? (
           <>
-            <span className="text-[12.5px] font-semibold text-zinc-600">{dipilih.size} dipilih</span>
+            <span className="text-[12.5px] font-semibold text-zinc-600">
+              {dipilih.size} dipilih
+            </span>
             <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'bulk' })}>
               <Layers className="h-3.5 w-3.5" />
               Generate Kuota Massal
             </Button>
           </>
         ) : (
-          <span className="text-[12.5px] text-zinc-500">
-            {denganAkun.length} akun toko
-          </span>
+          <span className="text-[12.5px] text-zinc-500">{denganAkun.length} akun toko</span>
         )}
       </div>
 
@@ -175,26 +174,35 @@ export function AkunManager({ stores }: { stores: Store[] }) {
           }
         />
       ) : (
-        <TableWrap>
-          <thead>
-            <tr>
-              <Th className="w-9">{checkboxSemua}</Th>
-              <Th>Nama Toko</Th>
-              <Th>Email Login</Th>
-              <Th>Username</Th>
-              <Th>Tier</Th>
-              <Th className="text-right">Terjual</Th>
-              <Th className="text-right">Sisa Kuota</Th>
-              <Th>Komisi</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Aksi</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
+        /*
+         * SATU markup untuk HP & desktop — pola yang sama dengan /keys dan
+         * /toko. Sebelumnya <TableWrap> (tabel, `hidden` di bawah `lg`) DAN
+         * `TableCards` (kartu, `lg:hidden`) dirender bersamaan; `display:none`
+         * tidak menghentikan React merender + hydrate, jadi tiap akun
+         * ter-render DUA kali. Ini halaman dengan TBT tertinggi (576 ms).
+         */
+        <ListShell>
+          <ListHead gridClass={GRID_AKUN}>
+            <span className="flex items-center">{checkboxSemua}</span>
+            <ListHeadCell>Nama Toko</ListHeadCell>
+            <ListHeadCell>Email Login</ListHeadCell>
+            <ListHeadCell>Username</ListHeadCell>
+            <ListHeadCell>Tier</ListHeadCell>
+            <ListHeadCell className="text-right">Terjual</ListHeadCell>
+            <ListHeadCell className="text-right">Sisa Kuota</ListHeadCell>
+            <ListHeadCell>Komisi</ListHeadCell>
+            <ListHeadCell>Status</ListHeadCell>
+            <ListHeadCell className="text-right">Aksi</ListHeadCell>
+          </ListHead>
+
+          <ul className="divide-y divide-zinc-100">
             {terfilter.map((s) => (
-              <tr key={s.id} className="transition hover:bg-zinc-50/70">
-                <Td>{checkbox(s)}</Td>
-                <Td>
+              <ListRow key={s.id} gridClass={GRID_AKUN}>
+                {/* 1 — centang */}
+                <div className="flex items-center">{checkbox(s)}</div>
+
+                {/* 2 — Nama toko + tanggal daftar */}
+                <ListCell label="Nama Toko">
                   <Link
                     href={`/toko/${s.id}`}
                     className="font-semibold text-zinc-900 underline-offset-2 hover:underline"
@@ -202,65 +210,52 @@ export function AkunManager({ stores }: { stores: Store[] }) {
                     {s.nama_toko}
                   </Link>
                   <p className="text-[11px] text-zinc-500">daftar {sejak(s.created_at)}</p>
-                </Td>
-                <Td className="text-zinc-600">{s.email ?? '-'}</Td>
-                <Td className="text-zinc-600">{s.username ?? '-'}</Td>
-                <Td>
-                  <TierBadge tier={s.tier} />
-                </Td>
-                <Td className="tabular text-right">{s.total_terjual}</Td>
-                <Td className="text-right">
-                  <KuotaBadge sisa={s.sisa_kuota} />
-                </Td>
-                <Td className="tabular text-zinc-600">{rupiah(s.komisi_total)}</Td>
-                <Td>
-                  <StoreStatusBadge aktif={s.is_active} />
-                </Td>
-                <Td>
-                  <div className="flex items-center justify-end gap-1">{aksiAkun(s)}</div>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      )}
+                </ListCell>
 
-      {/* Tampilan HP: kartu satu per akun — tanpa scroll horizontal. */}
-      {terfilter.length > 0 ? (
-        <TableCards>
-          {terfilter.map((s) => (
-            <CardItem key={s.id}>
-              <CardHeader
-                right={checkbox(s)}
-                title={
-                  <Link href={`/toko/${s.id}`} className="underline-offset-2 hover:underline">
-                    {s.nama_toko}
-                  </Link>
-                }
-                subtitle={`daftar ${sejak(s.created_at)}`}
-              />
-              <div className="mt-2.5 space-y-1">
-                <CardField label="Email">{s.email ?? '-'}</CardField>
-                <CardField label="Username">{s.username ?? '-'}</CardField>
-                <CardField label="Terjual">
-                  <span className="tabular">{s.total_terjual}</span>
-                </CardField>
-                <CardField label="Sisa kuota">
+                {/* 3 — Email login */}
+                <ListCell label="Email Login">
+                  <span className="text-zinc-600">{s.email ?? '-'}</span>
+                </ListCell>
+
+                {/* 4 — Username */}
+                <ListCell label="Username">
+                  <span className="text-zinc-600">{s.username ?? '-'}</span>
+                </ListCell>
+
+                {/* 5 — Tier */}
+                <ListCell label="Tier">
+                  <TierBadge tier={s.tier} />
+                </ListCell>
+
+                {/* 6 — Terjual */}
+                <ListCell label="Terjual" className="tabular lg:text-right">
+                  <span>{s.total_terjual}</span>
+                </ListCell>
+
+                {/* 7 — Sisa kuota */}
+                <ListCell label="Sisa Kuota" className="lg:text-right">
                   <KuotaBadge sisa={s.sisa_kuota} />
-                </CardField>
-                <CardField label="Komisi">
-                  <span className="tabular">{rupiah(s.komisi_total)}</span>
-                </CardField>
-              </div>
-              <CardBadges>
-                <TierBadge tier={s.tier} />
-                <StoreStatusBadge aktif={s.is_active} />
-              </CardBadges>
-              <CardActions>{aksiAkun(s)}</CardActions>
-            </CardItem>
-          ))}
-        </TableCards>
-      ) : null}
+                </ListCell>
+
+                {/* 8 — Komisi */}
+                <ListCell label="Komisi" className="tabular text-zinc-600">
+                  <span>{rupiah(s.komisi_total)}</span>
+                </ListCell>
+
+                {/* 9 — Status */}
+                <ListCell label="Status">
+                  <StoreStatusBadge aktif={s.is_active} />
+                </ListCell>
+
+                {/* 10 — Aksi */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 lg:mt-0 lg:justify-end">
+                  {aksiAkun(s)}
+                </div>
+              </ListRow>
+            ))}
+          </ul>
+        </ListShell>
+      )}
 
       {/* Warning: toko tanpa akun auth */}
       {tanpaAkun.length > 0 ? (
@@ -464,7 +459,12 @@ function BulkKuotaDialog({
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
             Batal
           </Button>
-          <Button size="sm" onClick={submit} loading={busy} disabled={busy || !!err || stores.length === 0}>
+          <Button
+            size="sm"
+            onClick={submit}
+            loading={busy}
+            disabled={busy || !!err || stores.length === 0}
+          >
             <Layers className="h-3.5 w-3.5" />
             Terapkan ke {stores.length} toko
           </Button>

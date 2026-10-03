@@ -1,153 +1,47 @@
-'use client';
-
 import * as React from 'react';
-import { AlertTriangle, Inbox, Loader2 } from 'lucide-react';
+import { AlertTriangle, Inbox } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 /**
- * Pembungkus tabel — HANYA tampil di layar besar (`lg:` ke atas).
+ * ============================================================================
+ *  PRIMITIF DAFTAR RESPONSIF — SATU DOM untuk HP & desktop
+ * ============================================================================
  *
- * Di layar kecil tabel ini disembunyikan dan diganti `TableCards`, jadi
- * pengguna HP tidak pernah perlu scroll horizontal.
+ * File ini SENGAJA tidak punya `'use client'`.
+ *
+ * Sebelumnya ada `'use client'` di sini padahal seluruh file tidak memakai
+ * satu pun hook, event handler, atau API browser (sudah dicek). Directive itu
+ * membuat SELURUH modul ikut ter-bundle di sisi klien dan — yang lebih penting
+ * — memaksa komponen apa pun yang mengimpornya dari Server Component untuk
+ * dirender di browser. Karena `ListShell`/`ListRow` dipakai untuk merender
+ * isi tabel, akibatnya setiap sel data ikut ter-hydrate.
+ *
+ * Setelah directive dihapus, file ini bisa dipakai dua arah:
+ *   - dari Server Component  -> HTML sekali kirim, TIDAK ikut hydrate
+ *   - dari Client Component  -> tetapnormal, modul masuk bundle klien
+ *
+ * Primitif `TableWrap`/`TableCards`/`Th`/`Td`/`Card*`/`TableLoading`/
+ * `ListLabel` sudah DIHAPUS: setelah duplikasi tabel+kartu dibersihkan dari
+ * semua halaman, tidak ada satu pun pemanggilnya. Lihat catatan "Kenapa ini
+ * ada" di bawah untuk sejarahnya — jangan dikembalikan tanpa alasan.
+ *
+ * `gridClass` WAJIB sama persis antara `ListHead` dan `ListRow` supaya kolom
+ * header dan isi selalu sejajar.
  */
-export function TableWrap({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="table-wrap rounded-2xl border border-zinc-200/80 bg-white">
-      <table className="w-full min-w-[720px] border-collapse">{children}</table>
-    </div>
-  );
-}
 
-/* ------------------------------------------------------------------ */
-/* Padanan tabel untuk layar kecil — daftar kartu                     */
-/* ------------------------------------------------------------------ */
-
-/** Wadah daftar kartu. Pasangan `TableWrap` untuk tampilan HP. */
-export function TableCards({ children }: { children: React.ReactNode }) {
-  return <ul className="card-list">{children}</ul>;
-}
-
-/** Satu kartu = satu baris tabel. */
-export function CardItem({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <li className={cn('card-soft p-3.5', className)}>{children}</li>;
-}
-
-/** Judul kartu + slot kanan untuk badge/sCheckbox. */
-export function CardHeader({
-  title,
-  subtitle,
-  right,
-}: {
-  title: React.ReactNode;
-  subtitle?: React.ReactNode;
-  right?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-2.5">
-      {right ? <div className="pt-0.5">{right}</div> : null}
-      <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-bold leading-snug text-zinc-900">{title}</p>
-        {subtitle ? (
-          <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">{subtitle}</p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-/** Baris label→nilai di dalam kartu (mis. "Tier: Pro"). */
-export function CardField({
-  label,
+/** Wadah daftar: satu kartu putih membungkus header + baris. */
+export function ListShell({
   children,
   className,
 }: {
-  label: string;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn('flex items-baseline gap-2 text-[12.5px]', className)}>
-      <span className="w-24 shrink-0 text-zinc-500">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-zinc-800">{children}</span>
-    </div>
-  );
-}
-
-/** Deretan badge di dalam kartu. */
-export function CardBadges({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-1.5">{children}</div>;
-}
-
-/** Deretan aksi di dalam kartu — target sentuh tetap 44px di HP. */
-export function CardActions({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-3">
-      {children}
-    </div>
-  );
-}
-
-export function Th({
-  children,
-  className,
-  title,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-  title?: string;
-}) {
-  return (
-    <th className={cn('table-head', className)} title={title}>
-      {children}
-    </th>
-  );
-}
-
-export function Td({
-  children,
-  className,
-  title,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-  title?: string;
-}) {
-  return (
-    <td className={cn('table-cell', className)} title={title}>
-      {children}
-    </td>
-  );
-}
-
-/** Placeholder saat data sedang dimuat. */
-/* ------------------------------------------------------------------ */
-/* Daftar responsif SATU DOM untuk HP & desktop                         */
-/* ------------------------------------------------------------------ */
-
-/*
- * Kenapa ini ada (dan bukan `TableWrap` + `TableCards`):
- *
- * Versi lama merender DUA salinan data sekaligus — `<table>` untuk desktop
- * dan daftar kartu untuk HP — lalu menyembunyikan salah satunya lewat CSS
- * (`hidden lg:block` vs `lg:hidden`). CSS hiding tidak mencegah React
- * merender, jadi tiap baris di-hydrate dua kali, di-recalc dua kali, dan
- * ikut masuk payload HTML (178 KB untuk 20 key, bukan 95 KB). Audit
- * Lighthouse `mainthread-work-breakdown` menunjukkan `styleLayout` 754 ms
- * dan `scriptEvaluation` 1132 ms — hampir seluruhnya dari duplikasi ini.
- *
- * `ListShell`/`ListHead`/`ListRow` membuat SATU markup yang berubah bentuk
- * murni lewat CSS: HP = kartu bertumpuk, `lg:` ke atas = baris tabel. Satu
- * DOM, satu kali hydrate, nol CLS.
- *
- * `gridClass` WAJIB sama persis antara `ListHead` dan `ListRow` supaya kolom
- * header dan isi tetap sejajar.
- */
-
-/** Wadah daftar: satu kartu putih membungkus header + baris. */
-export function ListShell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('overflow-hidden rounded-2xl border border-zinc-200/80 bg-white', className)}>
+    <div
+      className={cn('overflow-hidden rounded-2xl border border-zinc-200/80 bg-white', className)}
+    >
       {children}
     </div>
   );
@@ -163,10 +57,7 @@ export function ListHead({
 }) {
   return (
     <div
-      className={cn(
-        'hidden border-b border-zinc-200/80 bg-zinc-50 px-3 py-2.5 lg:grid',
-        gridClass,
-      )}
+      className={cn('hidden border-b border-zinc-200/80 bg-zinc-50 px-3 py-2.5 lg:grid', gridClass)}
     >
       {children}
     </div>
@@ -174,22 +65,22 @@ export function ListHead({
 }
 
 /** Satu kepala kolom, untuk `ListHead`. */
-export function ListHeadCell({ children, className }: { children?: React.ReactNode; className?: string }) {
+export function ListHeadCell({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <span
-      className={cn(
-        'text-[11px] font-bold uppercase tracking-wide text-zinc-500',
-        className,
-      )}
-    >
+    <span className={cn('text-[11px] font-bold uppercase tracking-wide text-zinc-500', className)}>
       {children}
     </span>
   );
 }
 
 /**
- * Satu item daftar = satu `<li>`. Menggantikan `CardItem` untuk daftar yang
- * juga perlu tampil sebagai baris tabel di `lg:`.
+ * Satu item daftar = satu `<li>`.
  *
  * Pemisah antar baris dipasang oleh `divide-y` pada `<ul>` induknya, jadi
  * kelas ini tidak perlu border sendiri (menghindari garis dobel).
@@ -217,41 +108,32 @@ export function ListRow({
 }
 
 /**
- * Label kecil di dalam sel — hanya kelihatan di HP (baris tabel tak butuh).
+ * Satu sel daftar = label (khusus HP) + isi, dalam SATU elemen.
  *
- * Warna `zinc-500`, bukan `zinc-400`: label ini kini benar-benar terlihat di
- * HP (sebelumnya duplikat tabel+kartu disembunyikan CSS, jadi teks warna
- * muda lolos dari audit tanpa pernah diperiksa). `zinc-400` di atas putih
- * hanya ~2,6:1 dan gagal WCAG AA.
+ * Kenapa bukan `<div><span>Label</span>…</div>`: versi itu menambah satu node
+ * DOM per sel, padahal halaman admin merender 20 baris x 6-9 sel — ratusan
+ * node yang harus dibuat, di-parse, dan di-hydrate, sementara labelnya sendiri
+ * disembunyikan di layar lebar.
+ *
+ * Di sini label tidak pernah masuk DOM: CSS `::before` +
+ * `content: attr(data-label)` (lihat `.list-cell` di `app/globals.css`)
+ * memunculkannya hanya di bawah `lg`. Hemat node tanpa mengubah tampilan.
+ *
+ * Warna label `zinc-500`, bukan `zinc-400`: label ini benar-benar terlihat di
+ * HP, dan `zinc-400` di atas putih hanya ~2,6:1 — gagal WCAG AA.
  */
-export function ListLabel({ children }: { children: React.ReactNode }) {
+export function ListCell({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <span className="mb-0.5 block text-[10.5px] font-bold uppercase tracking-wide text-zinc-500 lg:hidden">
+    <div data-label={label} className={cn('list-cell', className)}>
       {children}
-    </span>
-  );
-}
-
-export function TableLoading({ rows = 5, cols = 6 }: { rows?: number; cols?: number }) {
-  return (
-    <div className="rounded-2xl border border-zinc-200/80 bg-white p-4">
-      <div className="flex items-center gap-2 text-[13px] text-zinc-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Memuat data…
-      </div>
-      <div className="mt-4 space-y-2" aria-hidden>
-        {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} className="flex gap-2">
-            {Array.from({ length: cols }).map((__, j) => (
-              <div
-                key={j}
-                className="h-8 flex-1 animate-pulse rounded-lg bg-zinc-100"
-                style={{ animationDelay: `${(i * cols + j) * 12}ms` }}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

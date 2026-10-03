@@ -10,10 +10,12 @@ import {
   Store,
   UserCog,
   UserPlus,
+  type LucideIcon,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { inisial } from '@/lib/format';
+import { NAV_ITEMS, judulHalaman, slotAktif, type NavHref } from '@/lib/nav';
 
 /**
  * ============================================================================
@@ -31,32 +33,35 @@ import { inisial } from '@/lib/format';
  * ============================================================================
  */
 
-const ITEMS = [
-  { href: '/dashboard', label: 'Dashboard', short: 'Beranda', Icon: LayoutDashboard },
-  { href: '/toko', label: 'Toko', short: 'Toko', Icon: Store },
-  { href: '/toko/baru', label: 'Daftar Toko Baru', short: 'Daftar', Icon: UserPlus },
-  { href: '/keys', label: 'Semua Key', short: 'Key', Icon: KeyRound },
-  { href: '/akun', label: 'Akun Toko', short: 'Akun', Icon: UserCog },
-] as const;
+/**
+ * Ikon per slot. Dipisah dari `NAV_ITEMS` (`@/lib/nav`) supaya daftar href dan
+ * label hanya ada di satu tempat; komponen `lucide` hanya boleh masuk dari
+ * modul client.
+ *
+ * Tipe `Record<NavHref, …>` membuat peta ini WAJIB lengkap: kalau nanti ada slot
+ * baru di `NAV_ITEMS` tanpa ikon, `tsc` gagal di sini — bukan `Icon: undefined`
+ * yang lolos ke runtime dan membuat satu slot bar navigasi tidak tampil.
+ */
+const IKON: Record<NavHref, LucideIcon> = {
+  '/dashboard': LayoutDashboard,
+  '/toko': Store,
+  '/toko/baru': UserPlus,
+  '/keys': KeyRound,
+  '/akun': UserCog,
+};
+
+const ITEMS = NAV_ITEMS.map((item) => ({ ...item, Icon: IKON[item.href] }));
 
 /**
- * Slot menu aktif untuk sebuah pathname.
+ * Island kecil untuk judul topbar.
  *
- * `/toko/baru` punya slot sendiri, jadi harus dikecualikan dari prefix
- * `/toko` — kalau tidak, dua slot aktif menyala bersamaan di halaman itu.
+ * Satu-satunya bagian shell yang benar-benar butuh `usePathname()`. Dipisah
+ * supaya shell-nya sendiri bisa jadi Server Component — kalau tidak, seluruh
+ * isi halaman (yang dirender di server) akan ikut ter-hydrate hanya karena
+ * judulnya bergantung pada URL.
  */
-function slotAktif(href: string, pathname: string): boolean {
-  if (href === '/toko') {
-    return pathname === '/toko' || (pathname.startsWith('/toko/') && pathname !== '/toko/baru');
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-/** Judul halaman untuk topbar — mengikuti slot menu yang aktif. */
-export function judulHalaman(pathname: string): string {
-  if (pathname === '/toko/baru') return 'Daftar Toko Baru';
-  const cocok = ITEMS.find(({ href }) => slotAktif(href, pathname));
-  return cocok?.label ?? 'Admin Portal';
+export function JudulHalaman() {
+  return <>{judulHalaman(usePathname())}</>;
 }
 
 /** Bar navigasi bawah. Dipasang sebagai sibling terakhir di dalam shell. */

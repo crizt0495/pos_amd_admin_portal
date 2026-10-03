@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { AppShell } from '@/components/admin/app-shell';
-import { ToastProvider } from '@/components/ui/toast';
+import { Toaster } from '@/components/ui/toast';
 import { demoAktif } from '@/lib/demo/config';
 import { requireAdmin } from '@/lib/supabase/guard';
 
@@ -20,10 +20,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!auth.ok) redirect('/login');
 
   return (
-    <ToastProvider>
+    /*
+     * `Toaster` sengaja dipasang sebagai SAUDAR `AppShell`, bukan provider di
+     * atasnya. Begitu Client Component membungkus `{children}`, React
+     * me-hydrate seluruh isi halaman, dan di sinilah biaya utamanya.
+     */
+    <>
       <AppShell email={auth.user.email} demo={demoAktif}>
         {children}
       </AppShell>
-    </ToastProvider>
+      <Toaster />
+    </>
   );
 }
