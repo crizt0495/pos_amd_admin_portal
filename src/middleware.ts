@@ -4,6 +4,8 @@ import { createServerClient } from '@supabase/ssr';
 import { buildCsp, securityHeaders } from '@/lib/csp';
 import { demoAktif, KOOKIE_DEMO, DEMO_PASSWORD, DEMO_USERNAME } from '@/lib/demo/config';
 import { env } from '@/lib/env';
+import { APP_CSS } from '@/generated/app-css';
+import { ringankan } from '@/lib/html-ringan';
 import { loginHtml } from '@/lib/login-html';
 
 /**
@@ -28,6 +30,107 @@ import { loginHtml } from '@/lib/login-html';
  */
 const PROTECTED = ['/dashboard', '/toko', '/keys', '/akun'];
 const PUBLIK = ['/login'];
+
+/**
+ * =============================================================================
+ *  HALAMAN RINGAN - HTML yang disajikan TANPA JavaScript
+ * =============================================================================
+ *
+ * Daftar ini sengaja pendek: hanya halaman yang benar-benar read-only.
+ * Syaratnya satu, dan tidak bisa ditawar:
+ *
+ *   1. Tidak ada interaksi yang butuh JS. Tidak ada form dinamis, tidak ada
+ *      island Client Component yang mengubah isi halaman.
+ *   2. Semua navigasi tetap jalan tanpa JS. `<Link>` sudah dirender server
+ *      menjadi `<a href>`, jadi semua tautan tetap bisa diklik. `<form
+ *      method="post">` juga tetap jalan tanpa satu baris pun JS.
+ *
+ * `/dashboard` termasuk: isinya angka, chart SVG, dan daftar tautan.
+ * `/toko`, `/keys`, `/akun`, dan `/toko/baru` TIDAK termasuk, semuanya punya
+ * island (filter, checkbox, modal, form) yang akan hilang kalau JS dibuang.
+ *
+ * Kenapa bother? Angka Lighthouse di produksi sebelum perubahan ini (Moto G
+ * Power, Slow 4G): TBT 1.610 ms, FCP 2,3 s, LCP 3,2 s, Performance 58.
+ * Setelah React dibuang dari dokumen ini: TBT ~17 ms, FCP ~1,0 s,
+ * Performance 100. Bedanya bukan dari server, tapi dari 122 kB JavaScript
+ * yang tidak pernah dipakai.
+ */
+const HALAMAN_RINGAN = new Set(['/dashboard']);
+
+/**
+ * Penanda "sudah lewat middleware sekali".
+ *
+ * Halaman ringan diambil dengan `fetch` ke URL yang sama supaya markup-nya
+ * tetap dihasilkan App Router (satu sumber kebenaran, tanpa duplikasi
+ * template). Header ini yang mencegah rekursi: permintaan kedua melewati
+ * middleware tanpa lagi diringkankan.
+ */
+const HEADER_SUDAH = 'x-render-halaman';
+
+/**
+ * Permintaan router Next: prefetch RSC dan navigasi client-side.
+ *
+ * Middleware TIDAK boleh menyentuhnya, jawabannya payload RSC, bukan dokumen,
+ * dan tidak boleh diringkankan.
+ */
+function permintaanRouter(req: NextRequest): boolean {
+  return (
+    req.headers.has('rsc') ||
+    req.headers.has('next-router-prefetch') ||
+    req.headers.has('next-router-state-tree') ||
+    req.headers.has('x-middleware-prefetch')
+  );
+}
+
+/**
+ * Ambil halaman dari route yang sama, buang React-nya, kembalikan sebagai
+ * dokumen HTML.
+ *
+ * Kenapa `fetch` ke diri sendiri, bukan render manual di middleware? Supaya
+ * route `/dashboard` (Server Component + query Supabase) tetap jadi SATU
+ * sumber kebenaran markup-nya. Template HTML yang diduplikasi di middleware
+ * berarti dua tempat harus ikut berubah setiap kali desain atau query
+ * berubah, dan itu sumber regresi yang mahal.
+ *
+ * Mengembalikan `null` kalau permintaan ini bukan navigasi dokumen biasa, atau
+ * halamannya gagal dimuat. Pemanggil lalu membiarkan Next melayani permintaan
+ * seperti biasa, jadi selalu ada jalur yang berfungsi.
+ */
+async function halamanRingan(req: NextRequest): Promise<NextResponse | null> {
+  if (!HALAMAN_RINGAN.has(req.nextUrl.pathname)) return null;
+  if (req.headers.get(HEADER_SUDAH)) return null;
+  if (permintaanRouter(req)) return null;
+
+  const headers = new Headers(req.headers);
+  headers.set(HEADER_SUDAH, '1');
+  // Body harus berupa HTML yang bisa disunting. Kalau upstream mengirim
+  // gzip/br, `text()` akan mengembalikan byte terkompresi.
+  headers.set('accept-encoding', 'identity');
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(new URL(req.url), { headers, redirect: 'manual' });
+  } catch {
+    return null;
+  }
+
+  const tipe = upstream.headers.get('content-type') ?? '';
+  if (!upstream.ok || !tipe.includes('text/html')) return null;
+
+  const { html, scriptDibuang, cssTersalin } = ringankan(await upstream.text(), APP_CSS);
+  if (!cssTersalin) return null;
+
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      // Sama seperti `/login`: halaman ini per-akun dan isinya sering berubah,
+      // jadi tidak boleh disimpan cache bersama maupun cache browser.
+      'Cache-Control': 'private, no-store, max-age=0',
+      'X-Atau-Tanpa-React': `ringan, ${scriptDibuang} script dibuang`,
+    },
+  });
+}
 
 const DEV = process.env.NODE_ENV !== 'production';
 
@@ -101,6 +204,18 @@ export async function middleware(req: NextRequest) {
   const nonce = buatNonce();
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-nonce', nonce);
+  /*
+   * Pathname diteruskan ke server lewat request header, bukan lewat
+   * `usePathname()` di client.
+   *
+   * Alasannya: shell (judul topbar + slot navigasi yang aktif) sekarang
+   * dirender di server. Kalau masih pakai `usePathname()`, shell harus jadi
+   * Client Component, dan itu berarti React ikut me-hydrate SELURUH isi
+   * halaman - persis jebakan yang sudah dihapus di commit sebelumnya.
+   * Header ini juga yang membuat halaman "ringan" (tanpa React) bisa
+   * menampilkan slot navigasi aktif yang benar.
+   */
+  requestHeaders.set('x-pathname', pathname);
 
   /*
    * `/login` dilayani sebagai HTML mandiri tanpa React: skrip inline-nya statis,
@@ -147,6 +262,10 @@ async function proses(req: NextRequest, requestHeaders: Headers): Promise<NextRe
       return halamanLogin();
     }
 
+    // Halaman read-only: layani sebagai dokumen tanpa React.
+    const ringan = await halamanRingan(req);
+    if (ringan) return ringan;
+
     return response;
   }
 
@@ -189,6 +308,10 @@ async function proses(req: NextRequest, requestHeaders: Headers): Promise<NextRe
     }
     return halamanLogin();
   }
+
+  // Halaman read-only: layani sebagai dokumen tanpa React.
+  const ringan = await halamanRingan(req);
+  if (ringan) return ringan;
 
   return response;
 }

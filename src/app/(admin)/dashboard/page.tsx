@@ -17,6 +17,14 @@ export default async function DashboardPage() {
   const auth = await requireAdmin();
   if (!auth.ok) redirect('/login');
 
+  /*
+   * `requireAdmin()` dan `getDashboard()` sudah dibungkus React `cache()`
+   * di lib/supabase/guard.ts dan lib/data.ts. Layout `(admin)` memanggil
+   * `requireAdmin()` juga, jadi tanpa `cache()` itu berarti verifikasi token
+   * Supabase (`auth.getUser()`) berjalan DUA kali per muat halaman - dua
+   * network round-trip, hanya untuk jawaban yang sama.
+   */
+
   const { summary, stores, sales } = await getDashboard();
   const totalMingguIni = sales.reduce((s, d) => s + d.jumlah, 0);
   const komisiMingguIni = sales.reduce((s, d) => s + d.komisi, 0);
@@ -56,6 +64,7 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/toko"
+            prefetch={false}
             aria-label="Lihat semua toko"
             className="inline-flex min-h-11 items-center gap-0.5 rounded-lg pr-2 text-[13px] font-semibold text-zinc-700 transition hover:text-zinc-900 lg:min-h-0"
           >
@@ -67,7 +76,7 @@ export default async function DashboardPage() {
         {stores.length === 0 ? (
           <p className="px-5 py-10 text-center text-[13px] text-zinc-500">
             Belum ada toko terdaftar.{' '}
-            <Link href="/toko/baru" className="font-semibold text-zinc-900 underline">
+            <Link href="/toko/baru" prefetch={false} className="font-semibold text-zinc-900 underline">
               Daftarkan toko pertama
             </Link>
             .
@@ -78,6 +87,7 @@ export default async function DashboardPage() {
               <li key={s.id}>
                 <Link
                   href={`/toko/${s.id}`}
+                  prefetch={false}
                   className="flex items-center gap-3 px-4 py-3 transition hover:bg-zinc-50 sm:px-5"
                 >
                   <div className="min-w-0 flex-1">

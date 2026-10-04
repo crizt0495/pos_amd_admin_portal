@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { cekKredensialDemo, demoAktif, DEMO_EMAIL, KOOKIE_DEMO } from '@/lib/demo/config';
 import { env, isSupabaseFullyConfigured, PESAN_ENV_BELUM_DIISI } from '@/lib/env';
+import { arahkan, kueri } from '@/lib/redirect';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -65,10 +66,7 @@ function isFormRequest(contentType: string | null): boolean {
 
 function formError(req: NextRequest, message: string): NextResponse {
   const next = safeNext(req.nextUrl.searchParams.get('next'));
-  const url = req.nextUrl.clone();
-  url.pathname = '/login';
-  url.search = `?error=${encodeURIComponent(message)}&next=${encodeURIComponent(next)}`;
-  return NextResponse.redirect(url, 303);
+  return arahkan(`/login?${kueri({ error: message, next })}`, 303);
 }
 
 export async function POST(req: NextRequest) {
@@ -125,10 +123,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (viaForm) {
-      const url = req.nextUrl.clone();
-      url.pathname = next;
-      url.search = '';
-      const res = NextResponse.redirect(url, 303);
+      // `Location` relatif: lihat lib/redirect.ts. URL absolut dari
+      // `req.nextUrl` bisa jadi origin lain (mis. `localhost` saat diakses
+      // lewat 127.0.0.1), dan Chrome lalu menolak submit form karena
+      // `form-action 'self'`.
+      const res = arahkan(next, 303);
       res.cookies.set(KOOKIE_DEMO, '1', {
         httpOnly: true,
         sameSite: 'lax',
@@ -201,10 +200,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (viaForm) {
-    const url = req.nextUrl.clone();
-    url.pathname = next;
-    url.search = '';
-    return NextResponse.redirect(url, 303);
+    return arahkan(next, 303);
   }
 
   return json({ ok: true, message: 'Berhasil login.', email }, 200);
