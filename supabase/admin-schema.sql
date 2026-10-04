@@ -17,6 +17,11 @@
 --    6. RPC   `admin_topup_bulk`  — top up banyak toko sekaligus
 --    7. RPC   `admin_revoke_key`  — revoke / hidupkan kembali serial key
 --    8. Grant + RLS untuk objek baru
+--    9. Tabel `produk`           — katalog produk + harga acuan komisi
+--   10. Kolom `licenses.produk_id` + 3 kolom baru di view `admin_keys`
+--
+--  Untuk install yang SUDAH ada: cukup jalankan file ini lagi. Semua pernyataan
+--  dalam file ini idempotent, jadi blok 1-10 tidak akan merusak data yang ada.
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
@@ -375,3 +380,129 @@ alter default privileges in schema public revoke execute on functions from publi
 --        tidak terdaftar di admin_accounts, email-nya tidak ada di ADMIN_EMAIL,
 --        dan tidak punya app_metadata.role = 'super_admin' akan ditolak.
 -- ---------------------------------------------------------------------------
+
+-- ===========================================================================
+-- 11. KATALOG PRODUK  (2026-10-04)
+--
+--     Menambah daftar produk yang dijual (nama aplikasi + harga), mengaitkan
+--     setiap lisensi ke produknya, lalu memakai harga itu sebagai acuan
+--     menghitung "Estimasi Komisi" di dashboard.
+--
+--     Jalankan file ini ULANG di SQL Editor untuk install yang sudah ada —
+--     semua pernyataan di bawah idempotent (`if not exists` / `or replace`),
+--     jadi tidak ada yang akan hilang dan tidak ada baris yang terduplikasi.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- 11.1 Tabel: produk
+--     `harga_sekali_bayar`        -> lisensi sekali bayar (license_type='sekali')
+--     `harga_langganan_tahunan`  -> lisensi langganan ('langganan'), per tahun
+--
+--     Kedua harga NULL-able: produk yang belum tahu salah satu jenis
+--     penetrationnya tetap bisa didaftarkan, dan barisnya tidak dipaksa 0
+--     (0 berarti "gratis", bukan "belum diisi" — bedanya penting buat estimasi).
+-- ---------------------------------------------------------------------------
+create table if not exists public.produk (
+  id                       uuid primary key default gen_random_uuid(),
+  nama_apariksi            text    not null check (length(btrim(nama_apariksi)) > 0),
+  harga_sekali_bayar       integer check (harga_sekali_bayar is null or harga_sekali_bayar >= 0),
+  harga_langganan_tahunan  integer check (harga_langganan_tahunan is null or harga_langganan_tahunan >= 0),
+  deskripsi                text,
+  created_at               timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- 11.2 Licensi -> produk
+--     Setiap lisensi boleh punya produk acuan. NULL = lisensi lama / belum
+--     ditautkan, dan itu menyumbang 0 ke estimasi komisi (bukan error).
+--
+--     `on delete set null` (bukan `cascade`): menghapus satu baris produk dari
+--     katalog TIDAK boleh ikut menghapus riwayat penjualan yang sudah terlanjur
+--     tercatat di `licenses`.
+-- ---------------------------------------------------------------------------
+alter table public.licenses
+  add column if not exists produk_id uuid references public.produk(id) on delete set null;
+
+create index if not exists licenses_produk_id_idx on public.licenses (produk_id);
+
+-- ---------------------------------------------------------------------------
+-- 11.3 View admin_keys — 3 kolom baru di AKHIR daftar.
+--
+--     `create or replace view` hanya boleh MENAMBAH kolom di bagian akhir, jadi
+--     urutan kolom yang sudah hidup tidak boleh disentuh di sini.
+--
+--     `harga_produk_acuan` = harga produk sesuai jenis lisensi:
+--       license_type = 'langganan' -> harga_langganan_tahunan
+--       selain itu                   -> harga_sekali_bayar
+--     `coalesce(..., 0)` disengaja: lisensi tanpa produk / produk tanpa harga
+--     untuk jenisnya itu menyumbang 0, supaya kartu dashboard tidak error.
+-- ---------------------------------------------------------------------------
+create or replace view public.admin_keys as
+  select
+    l.id,
+    l.serial_key,
+    l.partner_id          as store_id,
+    p.nama_toko           as nama_toko,
+    l.pembeli_nama        as nama_pembeli,
+    l.pembeli_hp          as telepon,
+    l.alamat              as alamat_pembeli,
+    l.paket_type          as paket,
+    l.license_type        as pilihan,
+    l.komisi_amount       as komisi,
+    l.tier,
+    l.tier_rate,
+    l.status,
+    l.hwid_locked,
+    l.device_name,
+    l.activated_at,
+    l.expires_at,
+    l.created_at,
+    -- --- baru (2026-10-04) ---
+    l.produk_id,
+    pr.nama_apariksi      as produk_nama,
+    coalesce(
+      case when l.license_type = 'langganan'
+           then pr.harga_langganan_tahunan
+           else pr.harga_sekali_bayar
+      end,
+      0
+    )                    as harga_produk_acuan
+  from public.licenses l
+  left join public.partners p on p.id = l.partner_id
+  left join public.produk  pr on pr.id = l.produk_id;
+
+-- ---------------------------------------------------------------------------
+-- 11.4 Grant + RLS untuk `produk` — sama seperti tabel admin lain.
+--     Tanpa `revoke`, publishable key milik siapa pun bisa INSERT produk palsu
+--     lewat PostgREST (Supabase memberi grant default pada objek baru).
+-- ---------------------------------------------------------------------------
+alter table public.produk enable row level security;
+revoke all on public.produk from anon, authenticated;
+grant select, insert, update, delete on public.produk to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 11.5 Seed: POS AMD.
+--     Dijaga `where not exists` supaya menjalankan file ini berulang kali tidak
+--     menambah baris "POS AMD" kedua.
+-- ---------------------------------------------------------------------------
+insert into public.produk (nama_apariksi, harga_sekali_bayar, harga_langganan_tahunan, deskripsi)
+select
+  'POS AMD',
+  500000,
+  250000,
+  'Aplikasi kasir untuk UMKM. Sekali bayar Rp500.000 atau langganan Rp250.000 per tahun.'
+where not exists (select 1 from public.produk where nama_apariksi = 'POS AMD');
+
+-- ---------------------------------------------------------------------------
+-- 11.6 BACKFILL LISENSI LAMA (OPSIONAL, jalankan kalau perlu).
+--
+--     Key yang sudah terjual SEBELUM tabel `produk` ada tidak punya produk_id,
+--     jadi estimasi komisinya 0 sampai ditautkan.
+--
+--     Hapus tanda `--` di bawah hanya kalau memang mau seluruh lisensi lama
+--     dihitung memakai harga POS AMD. Perhatikan: ini mengubah ANGKA estimasi
+--     komisi di dashboard, jadi sebaiknya backup dulu.
+-- ---------------------------------------------------------------------------
+-- update public.licenses
+--    set produk_id = (select id from public.produk where nama_apariksi = 'POS AMD')
+--  where produk_id is null;

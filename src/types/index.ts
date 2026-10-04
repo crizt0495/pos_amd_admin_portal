@@ -75,6 +75,42 @@ export interface Key {
   activated_at: string | null;
   expires_at: string | null;
   created_at: string;
+  /** Produk acuan lisensi ini (lihat tabel `produk`). */
+  produk_id: string | null;
+  produk_nama: string | null;
+  /**
+   * Harga produk sesuai jenis lisensi ini: `sekali` -> `harga_sekali_bayar`,
+   * `langganan` -> `harga_langganan_tahunan`.
+   *
+   * Hitung di SQL dan sudah di-`coalesce` ke 0, jadi di sisi aplikasi tidak
+   * pernah perlu memeriksa null untuk menjumlahkannya.
+   */
+  harga_produk_acuan: number;
+}
+
+/**
+ * Satu baris katalog produk (tabel `produk`).
+ *
+ * Kedua harga NULL-able dan itu disengaja: `NULL` berarti "belum diisi" untuk
+ * jenis penjualan itu, sedangkan `0` berarti "benar-benar gratis". Kalau
+ * keduanya dipaksa jadi 0, produk yang belum tahu harga langganannya akan ikut
+ * membuat estimasi komisi melorot.
+ */
+export interface Produk {
+  id: string;
+  nama_apariksi: string;
+  harga_sekali_bayar: number | null;
+  harga_langganan_tahunan: number | null;
+  deskripsi: string | null;
+  created_at: string;
+}
+
+/** Bentuk kiriman form produk -> Route Handler. */
+export interface ProdukInput {
+  nama_apariksi: string;
+  harga_sekali_bayar: number | null;
+  harga_langganan_tahunan: number | null;
+  deskripsi: string | null;
 }
 
 export interface TopupHistory {
@@ -98,8 +134,18 @@ export interface DashboardSummary {
   totalToko: number;
   totalKeyTerjual: number;
   totalKeySisa: number;
-  komisiPending: number;
+  /**
+   * Estimasi komisi = 20% x harga produk acuan, dari key berstatus `active`.
+   *
+   * Menggantikan "Komisi Pending" (jumlah komisi key yang belum dipakai).
+   * Angka itu menyesatkan: ia menjumlahkan komisi dari key yang belum pernah
+   * dipakai pembeli, padahal komisi baru benar-benar masuk saat key berstatus
+   * `active`.
+   */
+  estimasiKomisi: number;
   komisiTotal: number;
+  /** Key `active` yang terhubung ke katalog produk (dasar hitungan estimasi). */
+  keyAktifBer_acuan: number;
 }
 
 /** Satu titik pada chart penjualan 7 hari. */
