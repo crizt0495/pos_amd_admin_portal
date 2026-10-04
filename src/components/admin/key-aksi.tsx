@@ -78,6 +78,41 @@ export function KeySalin({ serial }: { serial: string }) {
   );
 }
 
+/**
+ * Tombol salin Hardware ID.
+ *
+ * Island-nya sengaja dibuat sekecil mungkin dan tanpa state apa pun, sama
+ * seperti `KeySalin`: satu fungsi, satu event listener, dan nilai HWID yang
+ * dirender penuh sebagai HTML di server.
+ *
+ * Tombol ini ada karena Hardware ID adalah satu-satunya nilai di tabel ini
+ * yang panjangnya 36 karakter tanpa spasi. Tanpa tombol salin, admin akan
+ * menyalin dengan tetikus dari teks yang terbungkus dua baris - dan salah satu
+ * karakter yang hilang membuat perbandingan gagal.
+ */
+export function HwidSalin({ hwid }: { hwid: string }) {
+  const toast = useToast();
+
+  async function salin() {
+    try {
+      await navigator.clipboard.writeText(hwid);
+      toast.sukses('Hardware ID disalin.');
+    } catch {
+      toast.gagal('Gagal menyalin. Salin manual ya.');
+    }
+  }
+
+  return (
+    <IconButton
+      label={`Salin Hardware ID ${hwid}`}
+      onClick={salin}
+      className="h-8 w-8 shrink-0 border-transparent lg:h-6 lg:w-6"
+    >
+      <Copy className="h-3.5 w-3.5" />
+    </IconButton>
+  );
+}
+
 export function KeyAksi({ data: k }: { data: KeyAksiData }) {
   const router = useRouter();
   const toast = useToast();
