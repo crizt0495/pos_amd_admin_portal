@@ -151,5 +151,25 @@ cek(
   !/<script[^>]*\ssrc=/.test(loginHtmlSrc) && /const SCRIPT = `/.test(loginHtmlSrc),
 );
 
+// --- 10. Tidak boleh ada dokumen yang di-prerender ----------------------------
+/*
+ * CSP memakai nonce, jadi setiap tag `<script>` harus punya nonce yang sama
+ * dengan yang ada di response header. Next hanya bisa menempelkan nonce saat
+ * merender per request; dokumen yang di-prerender saat build sudah jadi HTML
+ * jadi sebelum ada request, jadi tag skripnya tanpa nonce - dan karena
+ * `strict-dynamic` aktif, browser memblokir SEMUA skrip di halaman itu.
+ *
+ * Gejalanya di produksi: halaman 404 (dan sebelumnya `/`) menampilkan
+ * "Loading the script ... violates the following Content Security Policy"
+ * sebanyak 10 kali. `force-dynamic` di layout root menutup semua route,
+ * termasuk yang ditambahkan nanti, jadi cukup dijaga di satu tempat.
+ */
+const rootLayoutSrc = readFileSync(join(ROOT, 'src', 'app', 'layout.tsx'), 'utf8');
+cek(
+  'layout root memakai dynamic = force-dynamic',
+  /export const dynamic\s*=\s*'force-dynamic'/.test(rootLayoutSrc),
+  'route yang di-prerender tidak bisa membawa nonce, jadi skripnya diblokir CSP',
+);
+
 console.log(`\n${lulus} lulus, ${gagal} gagal`);
 process.exit(gagal ? 1 : 0);
