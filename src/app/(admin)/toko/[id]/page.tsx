@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   History,
   KeyRound,
+  Mail,
   MapPin,
   Phone,
   Store as StoreIcon,
@@ -76,7 +77,7 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
       </header>
 
       {/* Kartu info */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="card-soft p-4">
           <p className="text-[12px] font-semibold text-zinc-500">Sisa Kuota</p>
           <p className="tabular mt-1.5 text-[20px] font-bold leading-none text-zinc-900">
@@ -100,25 +101,41 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
             {rupiah(store.komisi_total)}
           </p>
         </div>
-        <div className="card-soft p-4">
+
+        {/*
+         * Alamat pindah ke sini, bukan kartu terpisah. Datangnya satu kartu
+         * penuh hanya untuk alamat, sementara halaman ini sudah penuh kartu.
+         *
+         * Alamat boleh sangat panjang — sering sampai berbaris banyak, dan
+         * kadang ditulis tanpa spasi sama sekali. Jadi TIDAK boleh `truncate`
+         * atau `line-clamp`: memotong alamat bikin admin salah kirim barang.
+         * `break-words` + `whitespace-normal` + `leading-relaxed` membiarkan
+         * teks pecah di kata maupun di tengah kata yang kepanjangan, dan
+         * ruang putih yang tidak sengaja ditulis ikut dirapikan.
+         */}
+        <div className="card-soft p-4 sm:col-span-2 lg:col-span-3">
           <p className="text-[12px] font-semibold text-zinc-500">Kontak</p>
-          <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-zinc-700">
-            <Phone className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-            <span className="tabular">{store.no_hp ?? '-'}</span>
-          </p>
-          <p className="mt-0.5 truncate text-[12.5px] text-zinc-700" title={store.email ?? ''}>
-            {store.email ?? '-'}
-          </p>
+          <div className="mt-1.5 flex flex-col gap-0.5">
+            <p className="flex items-center gap-1.5 text-[12.5px] text-zinc-700">
+              <Phone className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+              <span className="tabular">{store.no_hp ?? '-'}</span>
+            </p>
+            <p
+              className="flex items-start gap-1.5 break-words text-[12.5px] leading-relaxed whitespace-normal text-zinc-700"
+              title={store.email ?? ''}
+            >
+              <Mail className="mt-[3px] h-3.5 w-3.5 shrink-0 text-zinc-400" />
+              <span className="min-w-0">{store.email ?? '-'}</span>
+            </p>
+            {store.alamat ? (
+              <p className="mt-1 flex items-start gap-1.5 break-words text-[12.5px] leading-relaxed whitespace-normal text-zinc-700">
+                <MapPin className="mt-[3px] h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                <span className="min-w-0">{store.alamat}</span>
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
-
-      {/* Alamat */}
-      {store.alamat ? (
-        <div className="card-soft flex items-start gap-2 p-3.5">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-          <p className="text-[13px] leading-relaxed text-zinc-700">{store.alamat}</p>
-        </div>
-      ) : null}
 
       {/* Riwayat generate key */}
       <section className="card-soft overflow-hidden">

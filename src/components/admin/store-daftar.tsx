@@ -100,8 +100,17 @@ export function StoreDaftar({ stores }: { stores: Store[] }) {
             </ListCell>
 
             {/* 5 — Alamat */}
+            {/*
+             * Alamat dibiarkan penuh. Dulu dipotong `max-w-[220px] truncate`,
+             * jadi admin hanya melihat potongan dan harus membuka detail toko
+             * untuk tahu alamat sebenarnya. Teksnya kini membungkus sendiri,
+             * dan sel tetap rapi karena tiap kolom punya lebar sendiri.
+             */}
             <ListCell label="Alamat">
-              <span className="block max-w-[220px] truncate text-zinc-600" title={s.alamat ?? ''}>
+              <span
+                className="block break-words leading-relaxed whitespace-normal text-zinc-600"
+                title={s.alamat ?? ''}
+              >
                 {s.alamat ?? '-'}
               </span>
             </ListCell>
