@@ -54,8 +54,9 @@
  *
  * Aplikasi ini tidak memakai satu pun dari API tersebut (hasil grep: nol
  * `innerHTML`/`eval`/`new Function`/`dangerouslySetInnerHTML`), jadi tidak ada
- * kode kita yang perlu dibuat policy. Policy `nextjs` diizinkan karena
- * runtime Next sendiri membuat TrustedHTML saat membuat element;
+ * kode kita yang perlu dibuat policy. Policy `nextjs` (dan policy anak
+ * `nextjs#bundler` milik webpack) diizinkan karena runtime Next sendiri
+ * membuat TrustedHTML saat membuat element;
  * di browser yang belum mendukung Trusted Types, direktif ini diabaikan
  * sepenuhnya sehingga tidak ada risiko kompatibilitas.
  */
@@ -147,8 +148,19 @@ export function buildCsp(o: CspOptions): string {
     `connect-src 'self' ${supabase} ${ws}`,
     // Tutup kelas XSS berbasis DOM: semua sink HTML wajib Trusted Types.
     `require-trusted-types-for 'script'`,
-    // Policy yang diizinkan. `nextjs` dipakai runtime Next.
-    `trusted-types nextjs`,
+    /*
+     * Policy yang diizinkan. `nextjs` dipakai runtime Next.
+     *
+     * `nextjs#bundler` WAJIB ikut disebut. Webpack Next menyetel
+     * `output.trustedTypes = "nextjs#bundler"` untuk semua bundel sisi klien,
+     * jadi runtime-nya selalu membuat policy bernama itu. Policy `nextjs` yang
+     * dibuat Next (`client/trusted-types.js`) TIDAK meneruskan `policyName`,
+     * sehingga Chrome menolak policy anak tersebut kalau namanya tidak
+     * tercantum di directive `trusted-types`. Akibatnya hydration React gagal
+     * dengan "Policy nextjs#bundler disallowed" dan seluruh halaman React
+     * (mis. /toko, /keys) jadi kosong.
+     */
+    `trusted-types nextjs nextjs#bundler`,
   ];
 
   if (!o.dev) directives.push('upgrade-insecure-requests');

@@ -126,6 +126,25 @@ cek('csp.ts punya base-uri', /base-uri 'self'/.test(cspSrc));
 cek('csp.ts punya form-action', /form-action 'self'/.test(cspSrc));
 cek('csp.ts mengirim COOP', /Cross-Origin-Opener-Policy.*same-origin/s.test(cspSrc));
 
+// --- 8b. Policy anak milik webpack Next harus diizinkan ---------------------
+// Webpack Next menyetel `output.trustedTypes = "nextjs#bundler"` untuk bundel
+// sisi klien, jadi runtime selalu membuat policy bernama itu. Policy `nextjs`
+// yang dibuat Next tidak meneruskan `policyName`, jadi Chrome menolak policy
+// anak yang namanya tidak ada di directive `trusted-types`; akibatnya hydration
+// React gagal dan setiap halaman React kosong. Cek ini menjaga agar jangan
+// terlupakan lagi seperti yang terjadi di produksi.
+const trustedTypesDirective = cspSrc.match(/`trusted-types ([^`]*)`/);
+cek(
+  'csp.ts mengizinkan policy nextjs',
+  Boolean(trustedTypesDirective) && /\bnextjs\b/.test(trustedTypesDirective[1]),
+  trustedTypesDirective ? `ditemukan: "${trustedTypesDirective[1]}"` : 'directive tidak ada',
+);
+cek(
+  'csp.ts mengizinkan policy nextjs#bundler milik webpack',
+  Boolean(trustedTypesDirective) && /nextjs#bundler/.test(trustedTypesDirective[1]),
+  trustedTypesDirective ? `ditemukan: "${trustedTypesDirective[1]}"` : 'directive tidak ada',
+);
+
 // --- 9. Halaman login benar-benar tidak punya React -------------------------
 cek(
   'loginHtml tidak memuat chunk JS eksternal apa pun',
