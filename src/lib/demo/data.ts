@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { hariSingkat } from '@/lib/format';
+import { dariByte } from '@/lib/hardware';
+import { hargaAcuan, hitungEstimasiKomisi } from '@/lib/produk';
 import { tierOf } from '@/lib/tier';
 import type {
   DashboardSummary,
@@ -8,6 +10,8 @@ import type {
   LicenseStatus,
   LicenseType,
   PaketType,
+  Produk,
+  ProdukInput,
   SalesPoint,
   Store,
   TopupHistory,
@@ -77,8 +81,10 @@ const SEEDS: Seed[] = [
 const stores: Store[] = [];
 const keys: Key[] = [];
 const topups: TopupHistory[] = [];
+const produk: Produk[] = [];
 let seqKey = 1;
 let seqTopup = 1;
+let seqProduk = 1;
 
 /* ------------------------------------------------------------------ */
 /* Generator                                                           */
@@ -108,7 +114,31 @@ function teleponKe(idx: number): string {
   return `081${String(200_000_000 + ((idx + 1) * 7_919 + idx * 104_729) % 799_999_999).slice(0, 9)}`;
 }
 
-/** Status keyagger untuk tiap store — sengaja disebar supaya SEMUA filter status ada isi. */
+/**
+ * UUID v4 stabil untuk HWID demo.
+ *
+ * Diturunkan dari nomor urut dengan FNV-1a 64-bit, lalu byte-nya dibentuk jadi
+ * UUID v4 oleh `dariByte()`. Sengaja tidak memakai `Math.random`, supaya dua
+ * jalankan demo menghasilkan HWID yang sama dan tangkapan layarnya bisa
+ * dibandingkan antar-jalankan.
+ *
+ * Hash diulang untuk tiap byte supaya 16 byte selalu terisi, dan supaya dua
+ * urutan berbeda tidak mungkin menghasilkan HWID yang sama.
+ */
+function uuidDariUrut(n: number): string {
+  const byte = new Uint8Array(16);
+
+  for (let i = 0; i < 16; i += 1) {
+    let h = 0xcbf29ce484222325n;
+    const benih = BigInt(n) * 0x9e3779b97f4a7c15n + BigInt(i);
+    h = BigInt.asUintN(64, (h ^ benih) * 0x100000001b3n);
+    byte[i] = Number(h & 0xffn);
+  }
+
+  return dariByte(byte);
+}
+
+/** Status key yang varied untuk tiap store — sengaja disebar supaya SEMUA filter status ada isi. */
 function statusKey(i: number): LicenseStatus {
   if (i % 23 === 7) return 'revoked';
   if (i % 17 === 5) return 'blocked';
@@ -116,12 +146,57 @@ function statusKey(i: number): LicenseStatus {
   return 'active';
 }
 
+/**
+ * Katalog produk awal untuk mode demo.
+ *
+ * Dua produk, bukan satu: supaya halaman `/produk` punya sesuatu untuk
+ * ditampilkan dan bisa diuji tanpa membuat data manual. Angkanya sama dengan
+ * seed SQL (`POS AMD` 500rb / 250rb) supaya tampilan demo dan produksi tidak
+ * melenceng.
+ */
+function seedProduk(): void {
+  produk.push(
+    {
+      id: 'demo-produk-1',
+      nama_apariksi: 'POS AMD',
+      harga_sekali_bayar: 500_000,
+      harga_langganan_tahunan: 250_000,
+      deskripsi:
+        'Aplikasi kasir untuk UMKM. Sekali bayar Rp500.000 atau langganan Rp250.000 per tahun.',
+      created_at: isoHariLalu(120),
+    },
+    {
+      id: 'demo-produk-2',
+      nama_apariksi: 'POS AMD Lite',
+      // Harga langganannya sengaja NULL: produk ini hanya dijual sekali bayar.
+      // Kalau NULL dipaksa jadi 0, estimasi komisi akan menghitung lisensi
+      // langganannya seolah-olah gratis.
+      harga_sekali_bayar: 300_000,
+      harga_langganan_tahunan: null,
+      deskripsi: 'Versi ringkas untuk kiosk satu meja. Sekali bayar saja.',
+      created_at: isoHariLalu(45),
+    },
+  );
+}
+
+/** Produk yang dipakai sebuah key demo (sebagian key sengaja tanpa produk). */
+function produkUntukKey(i: number): Produk | null {
+  // 1 dari 5 key sengaja TIDAK punya produk, supaya kartu "Estimasi Komisi"
+  // menampilkan penghitung "tercakup" yang bukan 100% dan kelihatan realistis.
+  if (i % 5 === 3) return null;
+  return produk[i % 2] ?? null;
+}
+
 function seedUlang(): void {
   stores.length = 0;
   keys.length = 0;
   topups.length = 0;
+  produk.length = 0;
   seqKey = 1;
   seqTopup = 1;
+  seqProduk = 1;
+
+  seedProduk();
 
   SEEDS.forEach((seed, idx) => {
     const id = `demo-toko-${idx + 1}`;
@@ -154,6 +229,7 @@ function seedUlang(): void {
       const komisi = Math.round(HARGA[paket] * tier.rate);
       const status = statusKey(i);
       const hidup = status === 'active';
+      const p = produkUntukKey(seqKey);
 
       keys.push({
         id: `demo-key-${seqKey}`,
@@ -169,11 +245,27 @@ function seedUlang(): void {
         tier: tier.name,
         tier_rate: tier.rate,
         status,
-        hwid_locked: hidup ? `HWID-${1000 + seqKey}` : null,
+        /*
+         * HWID demo memakai UUID v4 sungguhan, bukan "HWID-1001".
+         *
+         * Bukan supaya kelihatan rapi. Kontrak hardware ID itu UUID v4 (lihat
+         * src/lib/hardware.ts), jadi data demo harus berbentuk UUID kalau demo
+         * dipakai menguji tampilan HWID - kalau tidak, penanda "bentuk nilai
+         * ini bukan UUID v4" akan muncul di setiap baris dan menutupi tampilan
+         * yang sebenarnya.
+         *
+         * Nilainya diturunkan dari nomor urut, jadi tetap stabil antar-jalankan
+         * (tidak memakai Math.random) dan tetap berbeda per key.
+         */
+        hwid_locked: hidup ? uuidDariUrut(seqKey) : null,
         device_name: hidup ? `PC-KASIR-${(idx % 4) + 1}` : null,
         activated_at: hidup ? isoHariLalu(Math.max(0, hariLalu - 1)) : null,
         expires_at: pilihan === 'langganan' ? isoHariLalu(-365) : null,
         created_at: isoHariLalu(hariLalu),
+        produk_id: p?.id ?? null,
+        produk_nama: p?.nama_apariksi ?? null,
+        // Sama seperti `admin_keys`: harga sesuai jenis lisensi, 0 kalau belum ada.
+        harga_produk_acuan: hargaAcuan(p, pilihan) ?? 0,
       });
       seqKey += 1;
     }
@@ -246,9 +338,13 @@ export function demoDashboard(): {
 } {
   hitungKomisiTotal();
 
-  const komisiPending = keys
-    .filter((k) => ['unused', 'blocked', 'revoked'].includes(k.status))
-    .reduce((a, k) => a + k.komisi, 0);
+  /*
+   * Estimasi komisi: 20% dari harga produk acuan, hanya key berstatus `active`.
+   *
+   * Fungsi `hitungEstimasiKomisi` yang dipakai, bukan perkalian manual di sini,
+   * supaya mode demo dan mode Supabase menghitung angka yang persis sama.
+   */
+  const { estimasi, tercakup } = hitungEstimasiKomisi(keys.filter((k) => k.status === 'active'));
 
   // 7 hari terakhir; hari tanpa key tetap ikut (nilai 0) supaya spacing chart rata.
   const mulai = new Date();
@@ -280,8 +376,9 @@ export function demoDashboard(): {
       totalToko: stores.length,
       totalKeyTerjual: stores.reduce((a, s) => a + s.total_terjual, 0),
       totalKeySisa: stores.reduce((a, s) => a + s.sisa_kuota, 0),
-      komisiPending,
+      estimasiKomisi: estimasi,
       komisiTotal: stores.reduce((a, s) => a + s.komisi_total, 0),
+      keyAktifBer_acuan: tercakup,
     },
     stores: [...stores]
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -435,6 +532,78 @@ export function demoBuatStore(p: {
   stores.unshift(s);
   hitungKomisiTotal();
   return { ...s };
+}
+
+/* ------------------------------------------------------------------ */
+/* Mutasi katalog produk                                              */
+/* ------------------------------------------------------------------ */
+
+/** Daftar produk demo, terbaru dulu (mengikuti urutan halaman `/produk`). */
+export function demoProduk(): Produk[] {
+  return [...produk]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((p) => ({ ...p }));
+}
+
+export function demoBuatProduk(p: ProdukInput): Produk {
+  const baru: Produk = {
+    id: `demo-produk-baru-${Date.now().toString(36)}-${seqProduk}`,
+    nama_apariksi: p.nama_apariksi,
+    harga_sekali_bayar: p.harga_sekali_bayar,
+    harga_langganan_tahunan: p.harga_langganan_tahunan,
+    deskripsi: p.deskripsi,
+    created_at: new Date().toISOString(),
+  };
+  seqProduk += 1;
+  produk.unshift(baru);
+  return { ...baru };
+}
+
+export function demoPatchProduk(id: string, patch: Partial<ProdukInput>): Produk | null {
+  const p = produk.find((x) => x.id === id);
+  if (!p) return null;
+  Object.assign(p, patch);
+  hitungHargaAcuanKey();
+  return { ...p };
+}
+
+/**
+ * Hapus satu produk dari katalog.
+ *
+ * Mirroring `licenses.produk_id on delete set null`: key yang sudah terlanjur
+ * terjual TIDAK ikut terhapus, `produk_id`-nya jadi kosong. Odanya balik
+ * otomatis karena `harga_produk_acuan` dihitung ulang dari produk, bukan
+ * disimpan.
+ *
+ * Return `null` kalau produknya tidak ada; kalau ada, return nama produk yang
+ * dihapus beserta jumlah key yang kehilangan acuan harga.
+ */
+export function demoHapusProduk(id: string): { nama: string; kehilangan: number } | null {
+  const idx = produk.findIndex((x) => x.id === id);
+  if (idx === -1) return null;
+
+  const nama = produk[idx]!.nama_apariksi;
+  produk.splice(idx, 1);
+
+  const kehilangan = keys.filter((k) => k.produk_id === id).length;
+  hitungHargaAcuanKey();
+
+  return { nama, kehilangan };
+}
+
+/**
+ * Hitung ulang `produk_id` / `produk_nama` / `harga_produk_acuan` tiap key.
+ *
+ * Dipanggil setelah produk berubah supaya tidak ada key yang masih memegang
+ * harga produk yang sudah dihapus atau sudah diedit. Di produksi perannya
+ * dilakukan view `admin_keys` (dihitung di SQL), jadi fungsi ini khusus demo.
+ */
+function hitungHargaAcuanKey(): void {
+  for (const k of keys) {
+    const p = produk.find((x) => x.id === k.produk_id) ?? null;
+    k.produk_nama = p?.nama_apariksi ?? null;
+    k.harga_produk_acuan = hargaAcuan(p, k.pilihan) ?? 0;
+  }
 }
 
 /** Kembalikan data ke kondisi awal (dipakai tombol "Reset data demo"). */
