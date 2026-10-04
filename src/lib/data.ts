@@ -63,32 +63,33 @@ export const getDashboard = cache(async (): Promise<{
 
   const db = createAdminClient();
 
-  // 4 angka utama. Count/aggregate di DB, bukan ambil semua baris ke memory.
-  const [toko, terjual, sisa, komisiPending, komisiTotal] = await Promise.all([
-    db.from('admin_stores').select('id', { count: 'exact', head: true }),
-    db.from('admin_stores').select('total_terjual'),
-    db.from('admin_stores').select('sisa_kuota'),
+  // 7 hari terakhir, termasuk hari ini (timezone server).
+  const sejak7Hari = new Date();
+  sejak7Hari.setHours(0, 0, 0, 0);
+  sejak7Hari.setDate(sejak7Hari.getDate() - 6);
+
+  /*
+   * =============================================================================
+   *  SATU FASE PARALEL — jangan pecah jadi beberapa `await Promise.all()`.
+   * =============================================================================
+   * Setiap query ke Supabase itu satu kali bolak-balik jaringan (~170-600 ms
+   * tergantung lokasi server). Kalau query dipecah jadi beberapa fase berurutan,
+   * latensi fase-fase itu saling ditumpuk dan TTFB halaman jadi jauh lebih
+   * lambat. Semua kebutuhan dashboard ini diambil dalam SATU `Promise.all`.
+   *
+   * 4 angka utama: count/aggregate dihitung di memory dari baris yang sudah
+   * diambil, jadi tidak perlu query `head: true` terpisah untuk menghitung
+   * jumlah toko. KOLOM yang diambil sengaja hanya kolom agregat supaya payload
+   *-nya tetap kecil walaupun jumlah toko bertambah.
+   */
+  const [agregatStore, komisiPending, terbaru, salesRaw] = await Promise.all([
+    db.from('admin_stores').select('total_terjual, sisa_kuota, komisi_total'),
     // "Komisi pending" = komisi dari key yang BELUM dipakai pembeli
     // (status belum 'active'), yaitu uang yang sudah tercatat tapi belum cair.
     db
       .from('admin_keys')
       .select('komisi, status')
       .in('status', ['unused', 'blocked', 'revoked']),
-    db.from('admin_stores').select('komisi_total'),
-  ]);
-
-  const totalToko = toko.count ?? 0;
-  const totalKeyTerjual = (terjual.data ?? []).reduce((s, r) => s + (r.total_terjual ?? 0), 0);
-  const totalKeySisa = (sisa.data ?? []).reduce((s, r) => s + (r.sisa_kuota ?? 0), 0);
-  const komisiPendingNilai = (komisiPending.data ?? []).reduce((s, r) => s + (r.komisi ?? 0), 0);
-  const komisiTotalNilai = (komisiTotal.data ?? []).reduce((s, r) => s + (r.komisi_total ?? 0), 0);
-
-  // 7 hari terakhir, termasuk hari ini (timezone server).
-  const sejak7Hari = new Date();
-  sejak7Hari.setHours(0, 0, 0, 0);
-  sejak7Hari.setDate(sejak7Hari.getDate() - 6);
-
-  const [terbaru, salesRaw] = await Promise.all([
     db
       .from('admin_stores')
       .select(KOLOM_STORE)
@@ -99,6 +100,13 @@ export const getDashboard = cache(async (): Promise<{
       .select('created_at, komisi')
       .gte('created_at', sejak7Hari.toISOString()),
   ]);
+
+  const barisStore = agregatStore.data ?? [];
+  const totalToko = barisStore.length;
+  const totalKeyTerjual = barisStore.reduce((s, r) => s + (r.total_terjual ?? 0), 0);
+  const totalKeySisa = barisStore.reduce((s, r) => s + (r.sisa_kuota ?? 0), 0);
+  const komisiTotalNilai = barisStore.reduce((s, r) => s + (r.komisi_total ?? 0), 0);
+  const komisiPendingNilai = (komisiPending.data ?? []).reduce((s, r) => s + (r.komisi ?? 0), 0);
 
   // Rakit deret 7 hari (hari tanpa key tetap ada, nilainya 0) supaya
   // spacing chart-nya evenly spaced.

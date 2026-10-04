@@ -31,13 +31,37 @@ export type AdminAuthResult =
  *    UX tidak flickering, tapi PENEGAKNYA role ada di sini.
  *
  * Urutan pemeriksaan (bukan-atau — cukup salah satu lolos):
- *  1. Sesi Supabase valid (`auth.getUser()` — benar-benar verifikasi token).
+ *  1. Sesi Supabase valid (`auth.getClaims()` — verifikasi tanda tangan token).
  *  2. Email-nya terdaftar di env `ADMIN_EMAIL` (bisa lebih dari satu, pisah koma).
- *  3. Atau `user.app_metadata.role === 'super_admin'`.
+ *  3. Atau `app_metadata.role === 'super_admin'`.
  *
  * Catatan: `user_metadata` (yang bisa diisi user sendiri saat signup) TIDAK
  * dipakai di sini — hanya `app_metadata` yang hanya bisa ditulis lewat service
  * role / dashboard, jadi tidak bisa dipalsukan dari sisi pengguna.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA `getClaims()` BUKAN `getUser()`
+ * ---------------------------------------------------------------------------
+ * `getUser()` selalu bolak-balik ke server Auth untuk verifikasi token: ~165 ms
+ * per permintaan di produksi, padahal semua yang dibutuhkan portal ini sudah
+ * tertulis di payload JWT.
+ *
+ * `getClaims()` memverifikasi tanda tangan token secara LOKAL:
+ *  - Ambil kunci publik dari `/.well-known/jwks.json` (proyek ini tanda
+ *    tangannya asimetris/ES256), lalu `crypto.subtle.verify` terhadap token.
+ *    Kunci publik di-cache di memori proses, jadi ~2-4 ms setelah permintaan
+ *    pertama.
+ *  - Klaim `exp` tetap divalidasi, jadi token kedaluwarsa tetap ditolak.
+ *  - `app_metadata` ADA DI DALAM payload yang ditandatangani, jadi role tetap
+ *    tidak bisa dipalsukan dari sisi pengguna.
+ *  - Supabase otomatis jatuh kembali ke `getUser()` kalau algoritmanya simetris
+ *    (HS256) atau WebCrypto tidak tersedia — jadi tetap aman untuk proyek lama.
+ *
+ * Konsekuensi yang perlu diketahui (risiko yang sama dengan yang didokumentasikan
+ * Supabase untuk `getClaims()`): sesi yang dicabut di sisi server masih berlaku
+ * sampai access token habis masa (Supabase membatasi access token maksimal
+ * 1 jam). Token yang dipakai sudah bertanda tangan resmi dan hanya bisa
+ * diminta lewat login.
  */
 export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
   // --- Mode demo (lokal saja) ---------------------------------------------
@@ -57,23 +81,25 @@ export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
 
   const supabase = createClient();
 
-  // getUser() = verifikasi token ke server (bukan sekadar decode cookie).
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  // getClaims() = verifikasi tanda tangan token LOKAL (lihat catatan panjang di
+  // atas file ini): kunci publik ES256 dari JWKS, plus validasi `exp`. Jauh lebih
+  // cepat daripada getUser() yang bolak-balik ke server Auth tiap permintaan.
+  const { data, error } = await supabase.auth.getClaims();
+  const claims = data?.claims;
 
-  if (error || !user) {
+  if (error || !claims) {
     return { ok: false, error: 'Sesi tidak valid. Silakan login ulang.', status: 401 };
   }
 
-  const email = (user.email ?? '').toLowerCase();
+  const email = (claims.email ?? '').toLowerCase();
   if (!email) {
     return { ok: false, error: 'Akun ini tidak punya email.', status: 403 };
   }
 
   const daftarAdmin = env.adminEmails;
-  const role = user.app_metadata?.role;
+  // `app_metadata` ada di dalam payload bertanda tangan, jadi role di bawah
+  // tidak bisa dipalsukan dari sisi pengguna.
+  const role = claims.app_metadata?.role;
 
   const bolehLewatEnv = daftarAdmin.length > 0 && daftarAdmin.includes(email);
   const bolehLewatRole = role === 'super_admin';
@@ -82,5 +108,5 @@ export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
     return { ok: false, error: 'Akun ini bukan admin super. Akses ditolak.', status: 403 };
   }
 
-  return { ok: true, user: { userId: user.id, email } };
+  return { ok: true, user: { userId: claims.sub, email } };
 });

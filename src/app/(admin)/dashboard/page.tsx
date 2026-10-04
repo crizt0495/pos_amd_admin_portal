@@ -21,7 +21,7 @@ export default async function DashboardPage() {
    * `requireAdmin()` dan `getDashboard()` sudah dibungkus React `cache()`
    * di lib/supabase/guard.ts dan lib/data.ts. Layout `(admin)` memanggil
    * `requireAdmin()` juga, jadi tanpa `cache()` itu berarti verifikasi token
-   * Supabase (`auth.getUser()`) berjalan DUA kali per muat halaman - dua
+   * Supabase (`auth.getClaims()`) berjalan DUA kali per muat halaman - dua
    * network round-trip, hanya untuk jawaban yang sama.
    */
 
