@@ -22,7 +22,14 @@
  *
  * Yang SENGAJA tidak disentuh: `<meta>`, `<title>`, `<link rel="icon">`.
  * Judul, deskripsi, dan `noindex` tetap ikut — audit SEO tidak berubah.
+ *
+ * CSS yang disisipkan juga DI-SARING dulu oleh `saringCss()`: hanya aturan
+ * yang class-nya benar-benar muncul di dokumen ini yang ikut. Wanginya besar
+ * (33,5 kB -> 14,0 kB), dan karena dokumen ini sudah bebas JavaScript, tidak
+ * ada kelas yang bisa muncul belakangan. Lihat `src/lib/css-scope.ts`.
  */
+
+import { saringCss } from '@/lib/css-scope';
 
 /** Tag `<script>` BERISI: `...</script>`. */
 const RE_SCRIPT = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
@@ -46,23 +53,35 @@ const RE_STYLESHEET = /\brel="stylesheet"/i;
  */
 const RE_LINK_SIA_SIA = /\brel="(?:preload|modulepreload|prefetch|preconnect|dns-prefetch)"/i;
 
+/**
+ * Penanda sementara untuk posisi `<style>`. Dipakai supaya CSS bisa disaring
+ * setelah HTML final terbentuk: tag `<script>` dibuang dulu, baru nama
+ * class-nya dibaca.
+ */
+const PENANDA_CSS = '<!--__APP_CSS__-->';
+
 export interface Ringkasan {
   html: string;
   /** Berapa tag `<script>` yang dibuang. */
   scriptDibuang: number;
   /** `true` kalau ada CSS yang disalin ke dalam `<style>`. */
   cssTersalin: boolean;
+  /** Panjang CSS aplikasi sebelum disaring, dalam byte. */
+  cssSebelum: number;
+  /** Panjang CSS yang benar-benar disisipkan, dalam byte. */
+  cssSesudah: number;
 }
 
 /**
- * Buang React dari dokumen,-inline-kan CSS.
+ * Buang React dari dokumen, lalu saring dan inline-kan CSS.
  *
- * Mengembalikan dokumen yang SAMA persis secara visual, tapi nol JavaScript.
+ * Mengembalikan dokumen yang SAMA persis secara visual, tapi nol JavaScript dan
+ * CSS-nya seperlunya.
  */
 export function ringankan(html: string, css: string): Ringkasan {
   let scriptDibuang = 0;
 
-  const buangScript = (tag: string) => {
+  const buangScript = () => {
     scriptDibuang += 1;
     return '';
   };
@@ -75,16 +94,30 @@ export function ringankan(html: string, css: string): Ringkasan {
       // yang pertama supaya CSS tidak terduplikasi di dalam HTML.
       if (cssTersalin) return '';
       cssTersalin = true;
-      return `<style>${css}</style>`;
+      return PENANDA_CSS;
     }
     if (RE_LINK_SIA_SIA.test(tag)) return '';
     return tag;
   };
 
-  const out = html
+  const tanpaCss = html
     .replace(RE_SCRIPT, buangScript)
     .replace(RE_SCRIPT_KOSONG, buangScript)
     .replace(RE_LINK, olahLink);
 
-  return { html: out, scriptDibuang, cssTersalin };
+  if (!cssTersalin) {
+    return { html: tanpaCss, scriptDibuang, cssTersalin, cssSebelum: 0, cssSesudah: 0 };
+  }
+
+  const { css: cssSaring, sebelum, sesudah } = saringCss(css, tanpaCss);
+
+  return {
+    // Pakai fungsi pengganti supaya `$&` atau `$$` di dalam CSS tidak
+    // ditafsirkan sebagai pola penggantian.
+    html: tanpaCss.replace(PENANDA_CSS, () => `<style>${cssSaring}</style>`),
+    scriptDibuang,
+    cssTersalin: true,
+    cssSebelum: sebelum,
+    cssSesudah: sesudah,
+  };
 }

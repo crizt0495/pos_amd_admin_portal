@@ -60,26 +60,45 @@ const polos = (src) => tanpaKomentar(src).replace(/\s+/g, ' ');
 // =============================================================================
 
 /**
- * `html-ringan.ts` sengaja ditulis tanpa import apa pun supaya aman dipanggil
- * dari middleware Edge. Itu juga berarti file ini bisa di-transpile sendiri
- * oleh `typescript`, yang sudah jadi devDependency repo — tanpa toolchain lain.
+ * `html-ringan.ts` dan `css-scope.ts` ditulis tanpa API Node supaya aman
+ * dipanggil dari middleware Edge. Itu juga berarti file-nya bisa di-transpile
+ * sendiri oleh `typescript`, yang sudah jadi devDependency repo — tanpa
+ * toolchain lain. Specifier alias `@/...` dipetakan ke file sibling hasil
+ * transpile.
  */
 async function muatRingkankan() {
-  const js = ts.transpileModule(srcRingan, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
+  const keJs = (src) =>
+    ts.transpileModule(src, {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
 
   const dir = mkdtempSync(join(tmpdir(), 'uji-ringan-'));
-  const file = join(dir, 'html-ringan.mjs');
-  writeFileSync(file, js, 'utf8');
   try {
-    return await import(pathToFileURL(file).href);
+    writeFileSync(join(dir, 'css-scope.mjs'), keJs(baca('src', 'lib', 'css-scope.ts')), 'utf8');
+    const js = keJs(srcRingan).replace("'@/lib/css-scope'", "'./css-scope.mjs'");
+    writeFileSync(join(dir, 'html-ringan.mjs'), js, 'utf8');
+    return await import(pathToFileURL(join(dir, 'html-ringan.mjs')).href);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
 const { ringankan } = await muatRingkankan();
+
+/** Muat `css-scope.ts` lewat jalur transpile yang sama. */
+async function muatSaring() {
+  const js = ts.transpileModule(baca('src', 'lib', 'css-scope.ts'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const dir = mkdtempSync(join(tmpdir(), 'uji-saring-'));
+  try {
+    const file = join(dir, 'css-scope.mjs');
+    writeFileSync(file, js, 'utf8');
+    return await import(pathToFileURL(file).href);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 console.log('\n[A] Fungsi ringankan()');
 
@@ -311,6 +330,151 @@ cek(
   cssPunya ? `${cssPunya} byte` : 'belum ada - jalankan `npm run build` atau `node scripts/gen-css.mjs`',
 );
 cek('gen-css.mjs terpasang di prebuild', baca('package.json').includes('scripts/gen-css.mjs'));
+
+// =============================================================================
+//  F. `saringCss()` — CSS disaring per halaman, dan TIDAK boleh ada yang hilang
+// =============================================================================
+
+console.log('\n[F] Saringan CSS per halaman');
+
+const { saringCss, kelasDipakai, resetCacheSaring } = await muatSaring();
+
+/**
+ * CSS contoh dengan semua jebakan yang ada di keluaran Tailwind sungguhan.
+ *
+ * Dua baris pertama sengaja berisi jebakan yang SUDAH pernah membuat tampilan
+ * rusak, jadi tidak boleh lengah kalau ada refactor lagi:
+ *
+ * - Banner lisensi `/*! tailwindcss v3.4.19 ...*\/` mengandung titik. Kalau
+ *   ikut dibaca sebagai selector, `*,:after,:before` ikut terbuang dan
+ *   `box-sizing` seluruh portal berubah.
+ * - `.text-\[17px\]` punya kurung siku TER-ESCAPE di dalam nama kelasnya.
+ *   Kalau selector atribut dibuang dengan regex biasa, kurung siku itu ikut
+ *   hilang dan kelas `text-[17px]` tidak lagi cocok.
+ */
+const CSS_CONTOH = [
+  '/*! tailwindcss v3.4.19 | MIT License */',
+  '*,:after,:before{box-sizing:border-box}',
+  '.app-nav{position:fixed}',
+  '.p-4{padding:1rem}',
+  '.mt-0\\.5{margin-top:.125rem}',
+  '.top-1\\/2{top:50%}',
+  '.z-\\[60\\]{z-index:60}',
+  '.w-1\\/2{width:50%}',
+  '.text-\\[17px\\]{font-size:17px}',
+  '[data-x="1.5"]{display:block}',
+  '.hover\\:bg-zinc-100:hover{background-color:#f4f4f5}',
+  '.lg\\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}',
+  '.halaman-toko{padding:2rem}',
+  '@media (min-width:768px){.lg\\:grid-cols-3{display:grid}.halaman-toko{padding:3rem}}',
+  '@media (min-width:1024px){.lg\\:flex{display:flex}}',
+  '@keyframes spin{to{transform:rotate(360deg)}}',
+  'body{margin:0}',
+  ':root{--x:1px}',
+].join('');
+
+const HTML_LIGHT =
+  '<div class="app-nav p-4 mt-0.5 top-1/2 z-[60] w-1/2 text-[17px] hover:bg-zinc-100 lg:grid-cols-3 lg:flex"></div>';
+
+resetCacheSaring();
+const hasil = saringCss(CSS_CONTOH, HTML_LIGHT);
+
+cek(
+  'aturan dasar tetap ada walau ada banner lisensi',
+  hasil.css.includes('*,:after,:before{box-sizing:border-box}'),
+  hasil.css.slice(0, 120),
+);
+cek('banner lisensi ikut dipertahankan', hasil.css.includes('/*! tailwindcss'), hasil.css.slice(0, 80));
+cek('kurung siku ter-escape di nama kelas ikut terbawa', hasil.css.includes('.text-\\[17px\\]{font-size:17px}'), hasil.css);
+cek('selector atribut tanpa kelas tetap ada', hasil.css.includes('[data-x="1.5"]{display:block}'));
+cek('kelas dengan escape CSS ikut terbawa', hasil.css.includes('.mt-0\\.5{margin-top:.125rem}'), hasil.css);
+cek('kelas dengan garis miring ikut terbawa', hasil.css.includes('.top-1\\/2{top:50%}'), hasil.css);
+cek('kelas dengan kurung siku ikut terbawa', hasil.css.includes('.z-\\[60\\]{z-index:60}'), hasil.css);
+cek('varian hover ikut terbawa', hasil.css.includes('.hover\\:bg-zinc-100:hover'), hasil.css);
+cek('varian layar lebar ikut terbawa', hasil.css.includes('.lg\\:grid-cols-3'), hasil.css);
+cek('kelas halaman lain dibuang', !hasil.css.includes('.halaman-toko'), hasil.css);
+cek('aturan elemen tetap ada', hasil.css.includes('body{margin:0}'));
+cek('variabel :root tetap ada', hasil.css.includes(':root{--x:1px}'));
+cek('@keyframes tidak ikut terbuang', hasil.css.includes('@keyframes spin'));
+cek(
+  'isi @media ikut disaring',
+  /@media \(min-width:768px\)\{\.lg\\:grid-cols-3\{display:grid\}\}/.test(hasil.css),
+  hasil.css,
+);
+cek('blok @media jadi kosong dibuang', !/@media \(min-width:1024px\)\{\}/.test(hasil.css), hasil.css);
+cek('CSS benar-benar mengecil', hasil.sesudah < hasil.sebelum, `${hasil.sebelum} -> ${hasil.sesudah} byte`);
+
+// Saringan harus idempoten: CSS yang sudah disaring tidak boleh berubah lagi.
+const ulang = saringCss(hasil.css, HTML_LIGHT);
+cek('saringan idempoten', ulang.css === hasil.css, `${ulang.sesudah} vs ${hasil.sesudah} byte`);
+
+// Tanpa kelas sama sekali, CSS dikembalikan utuh supaya tidak ada yang hilang.
+resetCacheSaring();
+const tanpaKelas = saringCss(CSS_CONTOH, '<div>halo</div>');
+cek('tanpa kelas, CSS utuh dikembalikan', tanpaKelas.css === CSS_CONTOH);
+
+// Urutan class di markup tidak boleh mengubah hasil.
+resetCacheSaring();
+const urutA = saringCss(CSS_CONTOH, '<div class="p-4 app-nav"></div>');
+resetCacheSaring();
+const urutB = saringCss(CSS_CONTOH, '<div class="app-nav p-4"></div>');
+cek('urutan class tidak berpengaruh', urutA.css === urutB.css);
+
+/*
+ * Uji paling penting: untuk CSS build sungguhan, SETIAP kelas yang dipakai di
+ * markup wajib punya setidaknya satu aturan yang dipertahankan. Kalau ada kelas
+ * yang lolos ke HTML tanpa aturan CSS-nya, tampilannya rusak diam-diam dan
+ * tidak ada satu pun error di konsol.
+ */
+const CSS_BUILD = baca('src', 'generated', 'app-css.ts')
+  .replace(/^[\s\S]*?APP_CSS = `/, '')
+  .replace(/`;\s*$/, '');
+
+/** Escape nama kelas agar bisa dipakai sebagai selector CSS. */
+const jadiSelector = (k) => `.${k.replace(/[.[\]/:]/g, (c) => '\\' + c)}`;
+
+if (CSS_BUILD.length > 5000) {
+  /*
+   * Ambil nama kelas NYATA dari CSS build, bukan daftar karangan: kalau daftar
+   * karangan dipakai, ujinya bisa lulus atau gagal karena alasan yang salah.
+   * Yang diuji justru putaran balik escape -> nama kelas -> pencocokan.
+   */
+  const semuaSelector = [...CSS_BUILD.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{[^{}]*\}/g)].map(
+    (m) => m[1],
+  );
+  const namaKelas = new Set();
+  for (const sel of semuaSelector) {
+    for (const m of sel.matchAll(/\.((?:\\.|[^\s>+~(){}\[\]"'.,:|#*])+)/g)) {
+      namaKelas.add(m[1].replace(/\\(.)/g, '$1'));
+    }
+  }
+  // Prioritaskan kelas yang punya escape, karena itu jalur paling rawan.
+  const KELAS_BERESCAPE = [...namaKelas].filter((k) => k.includes('\\'));
+  const KELAS_UJI = [...new Set([...KELAS_BERESCAPE.slice(0, 8), ...[...namaKelas].slice(0, 12)])];
+
+  const htmlContoh = `<div class="${KELAS_UJI.join(' ')}"></div>`;
+  resetCacheSaring();
+  const nyata = saringCss(CSS_BUILD, htmlContoh);
+  const hilang = KELAS_UJI.filter((k) => !nyata.css.includes(jadiSelector(k)));
+  cek(
+    'tiap kelas di markup build punya aturan di CSS tersaring',
+    hilang.length === 0,
+    hilang.length
+      ? `tidak ada aturannya: ${hilang.join(', ')}`
+      : `${KELAS_UJI.length} kelas diperiksa (${KELAS_BERESCAPE.length} punya escape)`,
+  );
+  cek(
+    'CSS build tersaring jadi jauh lebih kecil',
+    nyata.sesudah < nyata.sebelum * 0.8,
+    `${(nyata.sebelum / 1024).toFixed(1)} kB -> ${(nyata.sesudah / 1024).toFixed(1)} kB`,
+  );
+  cek(
+    'kelasDipakai() membaca class="..."',
+    kelasDipakai(htmlContoh).size === KELAS_UJI.length,
+    String(kelasDipakai(htmlContoh).size),
+  );
+  cek('html-ringan memakai saringCss()', srcRingan.includes('saringCss('));
+}
 
 console.log(`\n== ${lulus} lulus, ${gagal} gagal ==`);
 process.exit(gagal ? 1 : 0);
