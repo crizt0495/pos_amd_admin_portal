@@ -63,6 +63,47 @@ export type AdminAuthResult =
  * 1 jam). Token yang dipakai sudah bertanda tangan resmi dan hanya bisa
  * diminta lewat login.
  */
+/**
+ * =============================================================================
+ *  CACHE KUNCI PUBLIK (JWKS)
+ * =============================================================================
+ * `createClient()` membuat instance Supabase baru untuk tiap permintaan, jadi
+ * cache JWKS bawaan library ikut terbuang tiap kali. Tanpa cache ini, setiap
+ * permintaan admin membayar satu bolak-balik jaringan (~60 ms) hanya untuk
+ * mengambil kunci publik yang isinya nyaris tidak pernah berubah.
+ *
+ * Disimpan di modul (per instance fungsi) dengan masa berlaku 1 jam, sama
+ * seperti TTL bawaan auth-js. Kalau `kid` di-rotasi, `getClaims()` tidak
+ * menemukan kunci di daftar ini lalu otomatis mengunduh ulang sendiri, jadi
+ * pergantian kunci projektikanpun tetap terdukung.
+ */
+const JWKS_TTL_MS = 60 * 60 * 1000;
+
+/** Tipe JWKS diambil dari tanda tangan `getClaims()` supaya tidak melenceng. */
+type Jwks = NonNullable<
+  Parameters<ReturnType<typeof createClient>['auth']['getClaims']>[1]
+>['jwks'];
+
+let jwksCache: { jwks: Jwks; diambilPada: number } | null = null;
+
+async function jwksPublik(): Promise<Jwks | undefined> {
+  const sekarang = Date.now();
+  if (jwksCache && jwksCache.diambilPada + JWKS_TTL_MS > sekarang) return jwksCache.jwks;
+
+  const url = `${env.supabaseUrl}/auth/v1/.well-known/jwks.json`;
+  const r = await fetch(url, {
+    headers: { apikey: env.supabaseAnonKey },
+    cache: 'no-store',
+  });
+  if (!r.ok) return undefined;
+
+  const jwks = (await r.json()) as Jwks;
+  if (!Array.isArray(jwks?.keys) || jwks.keys.length === 0) return undefined;
+
+  jwksCache = { jwks, diambilPada: sekarang };
+  return jwks;
+}
+
 export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
   // --- Mode demo (lokal saja) ---------------------------------------------
   // Dicek SEBELUM preflight Supabase: pada mode demo memang tidak ada env
@@ -84,7 +125,7 @@ export const requireAdmin = cache(async (): Promise<AdminAuthResult> => {
   // getClaims() = verifikasi tanda tangan token LOKAL (lihat catatan panjang di
   // atas file ini): kunci publik ES256 dari JWKS, plus validasi `exp`. Jauh lebih
   // cepat daripada getUser() yang bolak-balik ke server Auth tiap permintaan.
-  const { data, error } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims(undefined, { jwks: await jwksPublik() });
   const claims = data?.claims;
 
   if (error || !claims) {
