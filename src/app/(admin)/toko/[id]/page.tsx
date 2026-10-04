@@ -21,9 +21,11 @@ import {
   ListRow,
   ListShell,
 } from '@/components/ui/table';
+import { HardwareId } from '@/components/admin/hardware-id-sel';
 import { TopupStoreButton } from '@/components/admin/topup-store-button';
 import { getStoreDetail } from '@/lib/data';
 import { angka, rupiah, sejak, tanggalWaktu } from '@/lib/format';
+import { CATATAN_HWID } from '@/lib/hardware';
 import { LICENSE_TYPE_LABEL, PAKET_LABEL, tierRangeLabel, tierRule } from '@/lib/tier';
 import { requireAdmin } from '@/lib/supabase/guard';
 
@@ -31,9 +33,13 @@ import { requireAdmin } from '@/lib/supabase/guard';
  * Template kolom `lg:` untuk daftar key milik toko ini — PERSIS sama antara
  * `ListHead` dan `ListRow` supaya judul kolom dan isi sejajar. Di bawah `lg`
  * diabaikan: tiap sel jadi blok bertumpuk dengan `ListLabel`.
+ *
+ * Kolom Alamat duduk tepat di bawah Telepon dan diberi lebar sendiri
+ * (`minmax(140px,1.1fr)`). Lebarnya penting: alamat dibiarkan membungkus sampai
+ * habis, jadi kolom yang sempit justru membuat baris jadi tinggi sekali.
  */
 const GRID_KEY_TOKO =
-  'lg:grid-cols-[minmax(120px,1fr)_minmax(150px,1.3fr)_minmax(104px,.75fr)_minmax(90px,.6fr)_minmax(90px,.6fr)_minmax(100px,.7fr)_minmax(120px,.8fr)_minmax(96px,.65fr)]';
+  'lg:grid-cols-[minmax(120px,1fr)_minmax(150px,1.3fr)_minmax(104px,.75fr)_minmax(140px,1.1fr)_minmax(90px,.6fr)_minmax(90px,.6fr)_minmax(100px,.7fr)_minmax(120px,.8fr)_minmax(96px,.65fr)]';
 
 export const metadata: Metadata = { title: 'Detail Toko' };
 export const dynamic = 'force-dynamic';
@@ -151,6 +157,16 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
           </div>
         </div>
 
+        {/*
+         * Penjelasan Hardware ID ditulis SEKALI di halaman ini, bukan di setiap
+         * baris. Nilai HWID-nya sendiri tampil penuh di setiap baris; yang
+         * diulang per baris hanya penanda "bukan UUID v4" satu baris, karena di
+         * tabel 20 baris paragraf per baris akan menutupi kolom lain.
+         */}
+        <p className="border-b border-zinc-100 px-4 py-2.5 text-[11.5px] leading-relaxed text-zinc-500">
+          {CATATAN_HWID}
+        </p>
+
         {keys.length === 0 ? (
           <div className="p-4">
             <EmptyState
@@ -172,6 +188,7 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
                   <ListHeadCell>Serial Key</ListHeadCell>
                   <ListHeadCell>Pembeli</ListHeadCell>
                   <ListHeadCell>Telepon</ListHeadCell>
+                  <ListHeadCell>Alamat</ListHeadCell>
                   <ListHeadCell>Paket</ListHeadCell>
                   <ListHeadCell>Pilihan</ListHeadCell>
                   <ListHeadCell className="text-right">Komisi</ListHeadCell>
@@ -182,12 +199,23 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
                 <ul className="divide-y divide-zinc-100">
                   {keys.map((k) => (
                     <ListRow key={k.id} gridClass={GRID_KEY_TOKO}>
-                      {/* 1 — Serial key */}
+                      {/* 1 — Serial key + Hardware ID penuh */}
                       <ListCell
                         label="Serial Key"
                         className="font-mono text-[12px] font-semibold text-zinc-900"
                       >
                         {k.serial_key}
+                        {k.hwid_locked ? (
+                          /*
+                           * HWID ikut ditampilkan di halaman detail pembeli
+                           * dengan nilai PENUH, sama seperti di /keys. Ini
+                           * tempat admin memastikan key tertentu memang
+                           * terkunci ke komputer yang dikomplain pembeli.
+                           */
+                          <div className="mt-1.5 font-sans">
+                            <HardwareId hwid={k.hwid_locked} deviceName={k.device_name} />
+                          </div>
+                        ) : null}
                       </ListCell>
 
                       {/* 2 — Pembeli */}
@@ -200,27 +228,52 @@ export default async function TokoDetailPage({ params }: { params: { id: string 
                         <span className="tabular text-zinc-600">{k.telepon ?? '-'}</span>
                       </ListCell>
 
-                      {/* 4 — Paket */}
+                      {/* 4 — Alamat pembeli (diisi saat generate key) */}
+                      <ListCell label="Alamat">
+                        {/*
+                         * Alamat ini yang diisi PEMBELI saat generate key, bukan
+                         * alamat profil toko. Bedanya nyata: satu toko bisa punya
+                         * beberapa penerima yang berbeda, jadi alamat toko tidak
+                         * bisa dipakai untuk kirim barang.
+                         *
+                         * Dibiarkan penuh, tidak dipotong: memotong alamat
+                         * berisiko admin salah kirim. `break-words` +
+                         * `whitespace-normal` menahan teks tetap di dalam sel
+                         * walau satu kata saja kepanjangan.
+                         */}
+                        {k.alamat_pembeli ? (
+                          <span
+                            className="block break-words leading-snug whitespace-normal text-zinc-600"
+                            title={k.alamat_pembeli}
+                          >
+                            {k.alamat_pembeli}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-500">Belum diisi</span>
+                        )}
+                      </ListCell>
+
+                      {/* 5 — Paket */}
                       <ListCell label="Paket">
                         <span>{PAKET_LABEL[k.paket]}</span>
                       </ListCell>
 
-                      {/* 5 — Pilihan */}
+                      {/* 6 — Pilihan */}
                       <ListCell label="Pilihan">
                         <span>{LICENSE_TYPE_LABEL[k.pilihan]}</span>
                       </ListCell>
 
-                      {/* 6 — Komisi */}
+                      {/* 7 — Komisi */}
                       <ListCell label="Komisi" className="tabular lg:text-right">
                         <span>{rupiah(k.komisi)}</span>
                       </ListCell>
 
-                      {/* 7 — Tanggal */}
+                      {/* 8 — Tanggal */}
                       <ListCell label="Tanggal">
                         <span className="text-zinc-600">{tanggalWaktu(k.created_at)}</span>
                       </ListCell>
 
-                      {/* 8 — Status */}
+                      {/* 9 — Status */}
                       <ListCell label="Status">
                         <KeyStatusBadge status={k.status} />
                       </ListCell>

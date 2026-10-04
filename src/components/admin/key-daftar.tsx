@@ -4,6 +4,7 @@ import { rupiah, tanggalWaktu } from '@/lib/format';
 import { LICENSE_TYPE_LABEL, PAKET_LABEL } from '@/lib/tier';
 import type { Key } from '@/types';
 
+import { HardwareId } from './hardware-id-sel';
 import { KeyAksi, KeySalin } from './key-aksi';
 
 /**
@@ -37,7 +38,7 @@ import { KeyAksi, KeySalin } from './key-aksi';
  * Urutannya harus sama dengan urutan sel di dalam `ListRow`.
  */
 const GRID_DAFTAR =
-  'lg:grid-cols-[minmax(128px,1fr)_minmax(168px,1.5fr)_minmax(92px,.9fr)_minmax(74px,.7fr)_minmax(82px,.8fr)_minmax(82px,.8fr)_minmax(108px,.9fr)_minmax(78px,.7fr)_minmax(64px,auto)]';
+  'lg:grid-cols-[minmax(196px,1.3fr)_minmax(160px,1.4fr)_minmax(92px,.9fr)_minmax(74px,.7fr)_minmax(82px,.8fr)_minmax(82px,.8fr)_minmax(108px,.9fr)_minmax(78px,.7fr)_minmax(64px,auto)]';
 
 export function KeyDaftar({ keys }: { keys: Key[] }) {
   return (
@@ -66,33 +67,43 @@ export function KeyDaftar({ keys }: { keys: Key[] }) {
                 <KeySalin serial={k.serial_key} />
               </div>
               {k.hwid_locked ? (
-                // zinc-500 bukan zinc-400: teks kecil ini tampil penuh di HP
-                // dan zinc-400 hanya ~2,6:1 (gagal WCAG AA).
-                <p className="mt-0.5 text-[12px] text-zinc-500" title={k.hwid_locked}>
-                  terkunci ke {k.device_name ?? 'perangkat'}
-                </p>
+                // HWID tampil PENUH (lihat hardware-id-sel.tsx). Dulu nilainya
+                // hanya ada di atribut `title`, jadi praktis tidak terlihat
+                // sama sekali di HP - padahal justru nilai yang paling sering
+                // admin kutip saat membantu pembeli yang key-nya tidak jalan.
+                <div className="mt-1">
+                  <HardwareId hwid={k.hwid_locked} deviceName={k.device_name} />
+                </div>
               ) : null}
             </div>
 
-            {/* 2 — Pembeli: nama, alamat, telepon */}
+            {/* 2 — Pembeli: nama, telepon, lalu alamat */}
             <div className="mt-2.5 min-w-0 lg:mt-0">
               <p className="text-sm font-medium text-zinc-800">{k.nama_pembeli}</p>
-              {k.alamat_pembeli ? (
-                <p
-                  title={k.alamat_pembeli}
-                  className="line-clamp-2 max-w-[200px] text-xs leading-snug text-gray-600"
-                >
-                  {k.alamat_pembeli}
-                </p>
-              ) : (
-                <p className="max-w-[200px] text-xs leading-snug text-gray-600">
-                  Alamat belum diisi
-                </p>
-              )}
               {k.telepon ? (
                 // gray-500 bukan gray-400, alasan kontras sama seperti di atas.
                 <p className="tabular text-[12px] text-gray-500">{k.telepon}</p>
               ) : null}
+              {/*
+               * Alamat diisi PEMBELI saat generate key, jadi bisa jauh lebih
+               * panjang daripada nama. Dulu dipotong dua baris dengan
+               * `line-clamp-2` supaya tabel tetap rapat; sekarang dibiarkan
+               * penuh karena alamat yang terpotong justru membuat admin salah
+               * kirim barang. Lebar kolom sudah ditentukan template grid, jadi
+               * teksnya membungkus di dalam sel dan tidak melebar ke samping.
+               */}
+              {k.alamat_pembeli ? (
+                <p
+                  title={k.alamat_pembeli}
+                  className="mt-0.5 break-words text-xs leading-snug whitespace-normal text-gray-600"
+                >
+                  {k.alamat_pembeli}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-xs leading-snug whitespace-normal text-gray-500">
+                  Alamat belum diisi
+                </p>
+              )}
             </div>
 
             {/* 3 — Toko Penjual */}
