@@ -9,7 +9,7 @@ database Supabase yang **SAMA** dengan portal toko.
 
 - Deploy: <https://pos-amd-admin-portal.vercel.app>
 - Sumber data: tabel `partners` + `licenses` (dibaca lewat view `admin_stores` dan
-  `admin_keys`), ditambah tabel audit `topup_history`.
+  `admin_keys`), ditambah tabel katalog `produk` dan tabel audit `topup_history`.
 
 ---
 
@@ -25,7 +25,7 @@ database Supabase yang **SAMA** dengan portal toko.
 
 ## 2. Setup (jalankan berurutan)
 
-> **Mau langsung coba tanpa Supabase?** Loncat ke [ bagian 6](#6-mode-demo-lokal).
+> **Mau langsung coba tanpa Supabase?** Loncat ke [bagian 7](#7-mode-demo-opsional).
 
 ### 2.1 Terapkan SQL
 
@@ -38,6 +38,9 @@ File tersebut menambahkan:
 - tabel `topup_history` (audit trail setiap topup)
 - view `admin_stores` dan `admin_keys`
 - fungsi `admin_topup`, `admin_topup_bulk`, `admin_revoke_key`
+- tabel `produk` + kolom `licenses.produk_id` + penyesuaian view `admin_keys`
+  (bagian 11 — **wajib dijalankan ulang** kalau script sudah pernah dijalankan
+  sebelumnya, karena `idempotent` berarti "tidak salah", bukan "sudah ada")
 
 Sifatnya idempotent (`if not exists` / `create or replace`), jadi aman
 dijalankan ulang.
@@ -140,24 +143,95 @@ Variables** (Production + Preview), nilainya sama dengan `.env.local`.
 ## 5. Struktur
 
 ```
-src/app/(admin)/          dashboard, toko, toko/baru, toko/[id], keys, akun
+src/app/(admin)/          dashboard, toko, toko/baru, toko/[id], keys, produk,
+                          akun
 src/app/api/              auth/login, auth/logout, stores, stores/[id],
-                          topup, topup/bulk, keys/[id], akun/reset-password
-src/components/admin/     sidebar, stat-card, sales-chart, store-manager,
-                          key-manager, akun-manager, create-store-form
+                          topup, topup/bulk, keys/[id], produk, produk/[id],
+                          akun/reset-password
+src/components/admin/     app-nav, stat-card, sales-chart, store-daftar,
+                          key-daftar, akun-daftar, produk-daftar,
+                          hardware-id-sel
 src/lib/data.ts           semua query admin (selalu lewat wajibAdmin())
 src/lib/api-guard.ts      wajibAdmin(), jsonOk(), jsonGagal(), bacaJson()
-supabase/admin-schema.sql DDL yang wajib dijalankan sekali (termasuk tabel
+src/lib/hardware.ts       aturan Hardware ID (dipakai portal dan POS AMD)
+src/lib/produk.ts         aturan produk + 20% estimasi komisi
+supabase/admin-schema.sql DDL yang wajib dijalankan (termasuk tabel
                           admin_accounts untuk login username)
-scripts/                  bootstrap-admin.mjs, check-supabase.mjs
+scripts/                  bootstrap-admin.mjs, check-supabase.mjs, gen-css.mjs,
+                          test-csp.mjs, test-ringan.mjs
 ```
 
 Tier toko tidak disimpan di database — dihitung dari `total_terjual` lewat fungsi
 SQL `tier_name_of()` pada portal, sehingga tidak bisa tidak sinkron.
 
+### Halaman tanpa JavaScript
+
+`/dashboard` dan `/akun` disajikan **tanpa satu baris pun JavaScript**. Cara
+kerja Middleware `src/middleware.ts`: halaman dirender App Router seperti biasa,
+lalu markup-nya dibersihkan — semua `<script>` dibuang dan CSS aplikasi
+di-inline-kan ke `<style>` yang sudah disaring per halaman (`src/lib/html-ringan.ts`,
+`src/lib/css-scope.ts`).
+
+Konsekuensinya, interaksi di kedua halaman harus bisa jalan tanpa JS: pencarian
+jadi `<form method="get">`, top up dan reset password jadi `<details>` +
+`<form method="post">` yang dibalas Route Handler dengan 303 ke halaman asal
+beserta pesan di `?ok=` / `?err=`.
+
+Menambah halaman baru ke daftar `HALAMAN_RINGAN` berarti menulis ulang interaksi
+halaman itu dalam HTML native lebih dulu — **bukan** sekadar menambahkan nama.
+`npm run test:ringan` ikut menjaga dua hal yang tidak terlihat kalau rusak
+diam-diam: nol `'use client'` di seluruh graf import halaman, dan CSS yang
+disaring masih sama secara computed style dengan CSS penuh.
+
 ---
 
-## 6. Mode demo (opsional)
+## 6. Hardware ID
+
+Hardware ID adalah UUID v4 yang mengunci satu serial key ke satu komputer kasir.
+Aturan lengkapnya hidup di `src/lib/hardware.ts` — bukan di README — supaya
+portal dan aplikasi POS AMD memakai satu implementasi yang sama dan bisa diuji
+(`npm run test:ringan`, bagian G).
+
+### Yang dibaca dari WMI
+
+Urutan penyusunan, dari yang pertama berhasil dipakai:
+
+| # | Bahan | WMI |
+| --- | --- | --- |
+| a | UUID mesin | `SELECT UUID FROM Win32_ComputerSystemProduct` |
+| b | UUID mesin + nomor seri motherboard | `SELECT SerialNumber FROM Win32_BaseBoard` |
+| c | UUID mesin + nama komputer + id instalasi Windows | `Win32_ComputerSystem.Name`, `Win32_OperatingSystem.SerialNumber` |
+
+Hasil (a) dipakai langsung. Hasil (b) dan (c) di-SHA-256, 32 byte-nya dipotong
+jadi 16, lalu bit versi dan varian dipaksa jadi UUID v4 — jadi bentuknya sama
+persis dengan (a) dan tidak pernah berbeda antar-komputer.
+
+### Yang dilarang keras
+
+**JANGAN PERNAH** menyusun Hardware ID dari `Win32_ComputerSystem.Manufacturer`,
+`Win32_ComputerSystem.Model`, `Win32_OperatingSystem.Caption`, nama proses, atau
+nama produk apa pun. Ribuan komputer punya nilai yang sama persis di kolom
+kolom itu, jadi key akan ikut terbuka di komputer lain yang modelnya sama.
+
+Nomor seri motherboard juga **wajib diperiksa dulu**: sebagian besar motherboard
+konsumen mengisinya dengan `Default string` atau string kosong. Kalau nilai itu
+dipakai apa adanya, semua komputer tanpa nomor seri motherboard akan mengunci ke
+HWID yang sama. Buang nilai kosong dan `Default string`, lalu turun ke (c).
+
+Kalau (a), (b), dan (c) semuanya gagal, perangkat **tidak bisa** diafinisikan.
+Tampilkan pesan error yang jelas. Fallback ke pengenal produk lebih berbahaya
+daripada tidak bisa dipakai sama sekali.
+
+### Di portal
+
+Nilai HWID tampil penuh di `/keys` dan `/toko/[id]` — tidak dipotong, tidak jadi
+`title` yang hanya muncul saat hover. Nilai yang tidak berbentuk UUID v4 diberi
+penanda `bukan UUID v4`, karena itu sinyal versi aplikasi POS AMD yang perlu
+diperiksa.
+
+---
+
+## 7. Mode demo (opsional)
 
 Supaya aplikasi bisa dibuka dan dicoba **tanpa Supabase sama sekali**:
 
@@ -200,7 +274,7 @@ password yang di-reset, dan tidak ada satu pun request yang keluar ke Supabase.
   berbahaya: aplikasi yang kredensial demo-nya aktif tapi masih bisa menyentuh
   database asli. Efeknya `npm run build` **gagal dengan pesan jelas** — bukan
   diam-diam ter-deploy dengan kredensial demo.
-  Catatan: aturan ini bukan "larang di production". Yang berbahaya adalah.demo
+  Catatan: aturan ini bukan "larang di production". Yang berbahaya adalah demo
   hidup berdampingan dengan database, bukan nama environment-nya. Itu membuat
   mode demo bisa di-deploy ke project Vercel terpisah (tanpa env Supabase) untuk
   melihat-lihat tanpa menyentuh domain production.
