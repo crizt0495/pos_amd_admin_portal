@@ -24,7 +24,7 @@
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
@@ -84,6 +84,29 @@ async function muatRingkankan() {
 }
 
 const { ringankan } = await muatRingkankan();
+
+/**
+ * Muat satu file `.ts` apa pun lewat jalur transpile yang sama seperti
+ * `muatRingkankan()`.
+ *
+ * Dipakai untuk modul yang murni fungsi dan tidak menyentuh API Node maupun
+ * API server-only, jadi aman dipanggil dari sandbox test ini. Modul yang butuh
+ * `@/` alias harus menulis dependensinya relatif, atau di-import lewat
+ * `muatRingkankan()` yang sudah menyelesaikan alias-nya.
+ */
+async function muatModulTs(...bagian) {
+  const js = ts.transpileModule(baca(...bagian), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const dir = mkdtempSync(join(tmpdir(), 'uji-modul-'));
+  try {
+    const file = join(dir, 'modul.mjs');
+    writeFileSync(file, js, 'utf8');
+    return await import(pathToFileURL(file).href);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** Muat `css-scope.ts` lewat jalur transpile yang sama. */
 async function muatSaring() {
@@ -169,10 +192,153 @@ cek('dari html-ringan hanya fungsi ringankan yang dipakai', /export function (\w
 const blokSet = /HALAMAN_RINGAN\s*=\s*new Set\(\[([^\]]*)\]\)/.exec(srcMiddleware)?.[1] ?? '';
 cek('HALAMAN_RINGAN memuat /dashboard', blokSet.includes("'/dashboard'"), blokSet.trim());
 cek(
-  'halaman interaktif TIDAK diringankan',
-  !['/toko', '/keys', '/akun', '/toko/baru'].some((r) => blokSet.includes(`'${r}'`)),
+  'halaman dengan Client Component TIDAK diringankan',
+  !['/toko', '/keys', '/produk', '/toko/baru'].some((r) => blokSet.includes(`'${r}'`)),
   blokSet.trim(),
 );
+
+/*
+ * =============================================================================
+ *  B2. GRAFI IMPORT HALAMAN RINGAN - syarat yang sebenarnya
+ * =============================================================================
+ *
+ * Guard di atas hanya memeriksa nama route, dan itu lemah. `/akun` pernah masuk
+ * daftar "jangan diringankan" semata karena isinya punya Client Component,
+ * sementara penjaganya berupa daftar nama yang harus diketik tangan. Salah ketik
+ * satu karakter = halaman dengan 100 kB JavaScript lolos, dan tidak ada satu
+ * pun yang gagal.
+ *
+ * Yang diperiksa di sini tidak bisa dilanggar diam-diam: untuk setiap route di
+ * HALAMAN_RINGAN, telusuri SELURUH graf import mulai dari `page.tsx`-nya, lalu
+ * pastikan tidak ada satu pun file yang terjangkau punya direktif
+ * `'use client'`. Kalau ada Client Component di subtree mana pun - bahkan di
+ * komponen UI yang di-import dua tingkat lebih dalam - test ini gagal sambil
+ * menyebut file yang menyebabkannya.
+ */
+
+const AKAR = join(ROOT, 'src');
+
+/** Semua file .ts/.tsx di dalam `src`, untuk resolusi import berbasis nama. */
+function petakanSrc(dir = AKAR, out = new Map()) {
+  for (const entri of readdirSync(dir, { withFileTypes: true })) {
+    const penuh = join(dir, entri.name);
+    if (entri.isDirectory()) {
+      petakanSrc(penuh, out);
+    } else if (/\.tsx?$/.test(entri.name)) {
+      out.set(penuh, readFileSync(penuh, 'utf8'));
+    }
+  }
+  return out;
+}
+
+const PETA_SRC = petakanSrc();
+
+/** Ubah pemisah path platform menjadi `/` supaya perbandingan stabil. */
+const norm = (p) => p.split(sep).join('/');
+
+/**
+ * Resolusi satu specifier import ke file sungguhan di dalam `src`.
+ *
+ * Hanya bentuk yang dipakai repo ini: alias `@/...` dan relatif `./` `../`.
+ * Import ke `node_modules` (next, lucide-react, ...) sengaja diabaikan - kalau
+ * modul pihak ketiga sampai menarik Client Component, kerusakannya sudah di luar
+ * jangkauan test statis ini.
+ */
+function selesaikan(dari, spec) {
+  let basis;
+  if (spec.startsWith('@/')) basis = join(AKAR, spec.slice(2));
+  else if (spec.startsWith('.')) basis = join(dirname(dari), spec);
+  else return null;
+
+  const kandidat = [
+    basis,
+    `${basis}.tsx`,
+    `${basis}.ts`,
+    join(basis, 'index.tsx'),
+    join(basis, 'index.ts'),
+  ];
+  return kandidat.find((p) => PETA_SRC.has(p)) ?? null;
+}
+
+/** Specifier yang ditulis statis (`from '...'`) maupun dinamis (`import('...')`). */
+function specifierImport(src) {
+  const keluar = [];
+  for (const m of src.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) keluar.push(m[1]);
+  return keluar;
+}
+
+/**
+ * Direktif `'use client'` harus jadi pernyataan pertama file. Jangkar di awal
+ * baris supaya penyebutan `'use client'` di dalam komentar tidak ikut terhitung.
+ */
+const ARAH_CLIENT = /^\s*['"]use client['"]/m;
+
+/** Semua file yang terjangkau dari satu titik masuk, ikut masuk file itu sendiri. */
+function subgraf(mulai) {
+  const dikunjungi = new Set();
+  const antre = [mulai];
+
+  while (antre.length > 0) {
+    const file = antre.pop();
+    if (!file || dikunjungi.has(file)) continue;
+    const src = PETA_SRC.get(file);
+    if (src === undefined) continue;
+    dikunjungi.add(file);
+
+    for (const spec of specifierImport(src)) {
+      const tujuan = selesaikan(file, spec);
+      if (tujuan) antre.push(tujuan);
+    }
+  }
+
+  return dikunjungi;
+}
+
+/**
+ * Cari `page.tsx` yang merender sebuah route.
+ *
+ * Route group Next (folder `(admin)`) boleh muncul di tengah jalur, jadi
+ * pencocokan dilakukan pada ekor jalur, bukan persis sama.
+ *
+ * Mengembalikan KUNCI peta apa adanya (path absolut asli), bukan versi
+ * dinormalisasi, supaya hasilnya bisa langsung dipakai `subgraf`.
+ */
+function cariPage(route) {
+  const semua = [...PETA_SRC.keys()];
+  const ekor = norm(join('src', 'app', route)).toLowerCase();
+  const target = norm(route).toLowerCase();
+  const cocok = semua.filter((p) => {
+    const dir = norm(dirname(p)).toLowerCase();
+    return dir === ekor || dir.endsWith(target);
+  });
+  return cocok.length === 1 ? cocok[0] : null;
+}
+
+const ROUTE_RINGAN = [...blokSet.matchAll(/'([^']*)'/g)].map((m) => m[1]);
+
+cek('HALAMAN_RINGAN tidak kosong', ROUTE_RINGAN.length > 0, blokSet.trim());
+
+for (const route of ROUTE_RINGAN) {
+  const page = cariPage(route);
+
+  if (!page) {
+    cek(`graf import ${route}: page.tsx ditemukan`, false, `tidak ada satu page.tsx untuk ${route}`);
+    continue;
+  }
+
+  const terjangkau = subgraf(page);
+  const klien = [...terjangkau]
+    .filter((f) => ARAH_CLIENT.test(PETA_SRC.get(f) ?? ''))
+    .map((f) => norm(f).replace(`${norm(ROOT)}/`, ''));
+
+  cek(
+    `graf import ${route} bebas Client Component`,
+    klien.length === 0,
+    klien.length === 0
+      ? `${terjangkau.size} file terjangkau, nol 'use client'`
+      : klien.join('\n       '),
+  );
+}
 
 cek('pathname diteruskan ke layout lewat x-pathname', srcMiddleware.includes("'x-pathname'"));
 
@@ -365,6 +531,13 @@ const CSS_CONTOH = [
   '[data-x="1.5"]{display:block}',
   '.hover\\:bg-zinc-100:hover{background-color:#f4f4f5}',
   '.lg\\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}',
+  // Regresi 2026-10: nilai arbitrer yang memuat koma. Tailwind menulis koma
+  // sebagai hex escape `\2c ` (spasi ikut menjadi terminator escape), sedangkan
+  // di HTML atribut `class` tidak punya spasi. Regex yang berhenti di `.` atau
+  // `,` akan memotong nama kelas di tengah jalan dan aturannya ikut terbuang,
+  // sehingga tabel kehilangan template kolomnya di layar lebar.
+  '.lg\\:grid-cols-\\[34px_minmax\\(140px\\2c 1\\.2fr\\)_minmax\\(148px\\2c 1\\.2fr\\)\\]' +
+    '{grid-template-columns:34px minmax(140px,1.2fr) minmax(148px,1.2fr)}',
   '.halaman-toko{padding:2rem}',
   '@media (min-width:768px){.lg\\:grid-cols-3{display:grid}.halaman-toko{padding:3rem}}',
   '@media (min-width:1024px){.lg\\:flex{display:flex}}',
@@ -373,8 +546,12 @@ const CSS_CONTOH = [
   ':root{--x:1px}',
 ].join('');
 
+const GRID_ARBITRER = 'lg:grid-cols-[34px_minmax(140px,1.2fr)_minmax(148px,1.2fr)]';
+
 const HTML_LIGHT =
-  '<div class="app-nav p-4 mt-0.5 top-1/2 z-[60] w-1/2 text-[17px] hover:bg-zinc-100 lg:grid-cols-3 lg:flex"></div>';
+  '<div class="app-nav p-4 mt-0.5 top-1/2 z-[60] w-1/2 text-[17px] hover:bg-zinc-100 lg:grid-cols-3 lg:flex ' +
+  GRID_ARBITRER +
+  '"></div>';
 
 resetCacheSaring();
 const hasil = saringCss(CSS_CONTOH, HTML_LIGHT);
@@ -392,6 +569,11 @@ cek('kelas dengan garis miring ikut terbawa', hasil.css.includes('.top-1\\/2{top
 cek('kelas dengan kurung siku ikut terbawa', hasil.css.includes('.z-\\[60\\]{z-index:60}'), hasil.css);
 cek('varian hover ikut terbawa', hasil.css.includes('.hover\\:bg-zinc-100:hover'), hasil.css);
 cek('varian layar lebar ikut terbawa', hasil.css.includes('.lg\\:grid-cols-3'), hasil.css);
+cek(
+  'grid-cols dengan nilai arbitrer ber-koma ikut terbawa (regresi hex escape \\2c)',
+  hasil.css.includes('.lg\\:grid-cols-\\[34px_minmax\\(140px\\2c 1\\.2fr\\)'),
+  hasil.css,
+);
 cek('kelas halaman lain dibuang', !hasil.css.includes('.halaman-toko'), hasil.css);
 cek('aturan elemen tetap ada', hasil.css.includes('body{margin:0}'));
 cek('variabel :root tetap ada', hasil.css.includes(':root{--x:1px}'));
@@ -428,10 +610,50 @@ cek('urutan class tidak berpengaruh', urutA.css === urutB.css);
  */
 const CSS_BUILD = baca('src', 'generated', 'app-css.ts')
   .replace(/^[\s\S]*?APP_CSS = `/, '')
-  .replace(/`;\s*$/, '');
+  .replace(/`;\s*$/, '')
+  /*
+   * Buka lagi isi template literal-nya, persis kebalikan `keTemplateLiteral()`
+   * di scripts/gen-css.mjs (`\` -> `\\`, backtick -> ``\` ``, `${` -> `\${`).
+   *
+   * Tanpa langkah ini `CSS_BUILD` masih berisi backslash ganda, sehingga nama
+   * kelas hasil dekode selector punya satu backslash terlalu banyak dan TIDAK
+   * akan pernah cocok dengan nilai `class` di HTML. Gejalanya persis seperti
+   *bug saringan CSS: aturan ada di CSS tapi terbuang saat disaring.
+   */
+  .replace(/\\(.)/g, '$1');
 
-/** Escape nama kelas agar bisa dipakai sebagai selector CSS. */
-const jadiSelector = (k) => `.${k.replace(/[.[\]/:]/g, (c) => '\\' + c)}`;
+/**
+ * Dua ejaan yang mungkin dipakai CSS untuk satu nama kelas.
+ *
+ * CSS boleh menulis karakter yang tidak lazim sebagai escape sederhana (`\/`)
+ * ATAU sebagai hex escape (`\2c `). Keduanya sah, dan generator pun memakai
+ * keduanya. Ceknya karena itu menerima salah satu, bukan menebak yang mana.
+ */
+const ejaanSelector = (k) => [
+  '.' + k.replace(/[^A-Za-z0-9_-]/g, (c) => '\\' + c),
+  '.' + k.replace(/[^A-Za-z0-9_-]/g, (c) => '\\' + c.charCodeAt(0).toString(16) + ' '),
+];
+
+/*
+ * Ekstraktor nama kelas untuk DIJALANKAN LAGI di section F.
+ *
+ * Ditulis dengan regex, sedangkan `src/lib/css-scope.ts` memakai pemindai
+ * karakter. Keduanya sengaja dibuat berbeda: kalau logikanya sama, satu bug
+ * yang sama akan menutupi dirinya sendiri dan test tetap hijau.
+ *
+ * Yang dijaga di sini:
+ *   - `,` dan `:` TIDAK menghentikan nama kelas, karena keduanya muncul
+ *     ter-escape di nilai arbitrer Tailwind
+ *     (`grid-cols-[34px_minmax(140px,1.2fr)]`), begitu juga titik di `1.2fr`.
+ *   - Hex escape dibaca beserta SATU whitespace terminator-nya, karena itu yang
+ *     membuat `\2c ` (koma) tidak memutus nama kelas.
+ */
+const IDENT_CSS = /\.(?:\\(?:[0-9a-fA-F]{1,6}[ \n\t\r\f]?|.)|[^\\,:\s>+~{}"'*#;[\]()])+/g;
+
+const decodeIdent = (s) =>
+  s.replace(/\\(?:([0-9a-fA-F]{1,6})[ \n\t\r\f]?|([^\n\r\f]))/g, (_, hex, chr) =>
+    hex ? String.fromCodePoint(parseInt(hex, 16)) : chr,
+  );
 
 if (CSS_BUILD.length > 5000) {
   /*
@@ -444,18 +666,18 @@ if (CSS_BUILD.length > 5000) {
   );
   const namaKelas = new Set();
   for (const sel of semuaSelector) {
-    for (const m of sel.matchAll(/\.((?:\\.|[^\s>+~(){}\[\]"'.,:|#*])+)/g)) {
-      namaKelas.add(m[1].replace(/\\(.)/g, '$1'));
-    }
+    for (const m of sel.matchAll(IDENT_CSS)) namaKelas.add(decodeIdent(m[0].slice(1)));
   }
-  // Prioritaskan kelas yang punya escape, karena itu jalur paling rawan.
-  const KELAS_BERESCAPE = [...namaKelas].filter((k) => k.includes('\\'));
+
+  // Prioritaskan kelas yang butuh escape, karena itu jalur paling rawan: di
+  // situlah nama kelas bisa terpotong dan aturannya ikut hilang diam-diam.
+  const KELAS_BERESCAPE = [...namaKelas].filter((k) => /[^A-Za-z0-9_-]/.test(k));
   const KELAS_UJI = [...new Set([...KELAS_BERESCAPE.slice(0, 8), ...[...namaKelas].slice(0, 12)])];
 
   const htmlContoh = `<div class="${KELAS_UJI.join(' ')}"></div>`;
   resetCacheSaring();
   const nyata = saringCss(CSS_BUILD, htmlContoh);
-  const hilang = KELAS_UJI.filter((k) => !nyata.css.includes(jadiSelector(k)));
+  const hilang = KELAS_UJI.filter((k) => !ejaanSelector(k).some((e) => nyata.css.includes(e)));
   cek(
     'tiap kelas di markup build punya aturan di CSS tersaring',
     hilang.length === 0,
@@ -474,6 +696,179 @@ if (CSS_BUILD.length > 5000) {
     String(kelasDipakai(htmlContoh).size),
   );
   cek('html-ringan memakai saringCss()', srcRingan.includes('saringCss('));
+}
+
+/*
+ * =============================================================================
+ *  G. HARDWARE ID  —  kontrak yang harus benar, bukan sekadar tampil
+ * =============================================================================
+ *
+ * `src/lib/hardware.ts` adalah satu-satunya tempat aturan Hardware ID ditulis,
+ * dan aturan itu dipakai dua pihak: portal admin (menampilkan dan memeriksa)
+ * serta aplikasi POS AMD di sisi pembeli (mengirimkannya).
+ *
+ * Kalau bit versi/varian UUID v4 dibungkus salah di sini, hasilnya tetap
+ * berbentuk UUID yang valid. Tidak ada error, tidak ada log, tidak ada apa pun
+ * yang gagal. Sebaliknya, kalau pembungkusnya longgar, semua HWID yang sudah
+ * terkunci bisa berubah bentuk dan tidak ada satu pun key yang bisa dipakai
+ * kembali. Karena itu diuji bit per bit, bukan cuma "polanya cocok".
+ */
+
+console.log('\n[G] Hardware ID');
+
+const hw = await muatModulTs('src', 'lib', 'hardware.ts');
+
+cek('hardware.ts terbaca', hw !== null, hw ? Object.keys(hw).sort().join(', ') : 'gagal muat');
+
+if (hw) {
+  const { dariByte, hardwareIdSama, normalHardwareId, rapikanTampil, uuidV4, PANJANG_UUID } = hw;
+
+  // --- Pola UUID v4 --------------------------------------------------------
+
+  cek('UUID v4 dari SMBIOS dikenali', uuidV4('4c4c4544-0030-4910-8045-c4c04f343332'));
+  cek('UUID huruf besar dikenali', uuidV4('4C4C4544-0030-4910-8045-C4C04F343332'));
+  cek('spasi di ujung diterima', uuidV4('  4c4c4544-0030-4910-8045-c4c04f343332  '));
+  cek('versi bukan 4 ditolak', uuidV4('4c4c4544-0030-2910-8045-c4c04f343332') === false);
+  cek('UUID terpotong ditolak', uuidV4('4c4c4544-0030-4910') === false);
+  cek('bukan UUID ditolak', uuidV4('HWID-1001') === false);
+  cek('teks kosong ditolak', uuidV4('   ') === false);
+  cek('panjang UUID v4 = 36', PANJANG_UUID === 36, String(PANJANG_UUID));
+
+  /*
+   * Digit ke-20 adalah nibble varian, dan letaknya adalah karakter PERTAMA
+   * kelompok keempat (`xxxxxxxx-xxxx-xxxx-Nxxx-xxxx-xxxxxxxxxxxx`), bukan
+   * kelompok kelima. Salah posisi di sini akan membuat pemeriksaan lolos untuk
+   * yang salah.
+   *
+   * Yang sah cuma 8, 9, a, dan b (RFC 4122). Digit 0-7 dan c-f bukan varian
+   * UUID yang sah, jadi `uuidV4()` harus menolaknya.
+   */
+  for (const [digit, sah] of [
+    ['8', true],
+    ['9', true],
+    ['a', true],
+    ['b', true],
+    ['0', false],
+    ['7', false],
+    ['c', false],
+    ['f', false],
+  ]) {
+    const contoh = `4c4c4544-0030-4910-${digit}4c0-c04f343332ab`;
+    cek(`varian UUID ${digit} ${sah ? 'diterima' : 'ditolak'}`, uuidV4(contoh) === sah, contoh);
+  }
+
+  // --- `dariByte()`: pembungkus byte apa pun jadi UUID v4 ------------------
+  // Byte-nya sengaja pseudo-acak supaya bit versi/variant tidak bisa
+  // kebetulan benar hanya pada satu contoh.
+
+  const byteAcak = [];
+  let benih = 12345;
+  for (let i = 0; i < 16; i += 1) {
+    benih = (benih * 1103515245 + 12345) & 0x7fffffff;
+    byteAcak.push(benih & 0xff);
+  }
+
+  const dariAcak = dariByte(byteAcak);
+  cek('dariByte menghasilkan UUID v4', uuidV4(dariAcak), dariAcak);
+  cek('dariByte selalu 36 karakter', dariAcak.length === 36, String(dariAcak.length));
+  cek('digit ke-15 adalah versi 4', dariAcak[14] === '4', dariAcak);
+  cek('digit ke-20 adalah varian RFC 4122', '89ab'.includes(dariAcak[19]), dariAcak[19]);
+
+  const dariNol = dariByte(new Array(16).fill(0));
+  cek('dariByte([nol]) tetap UUID v4', uuidV4(dariNol), dariNol);
+  cek('dariByte([nol]) versi tetap 4', dariNol[14] === '4', dariNol);
+  cek('dariByte([nol]) varian menjadi 8', dariNol[19] === '8', dariNol);
+
+  const dariSatu = dariByte(new Array(16).fill(0xff));
+  cek('dariByte([0xff]) tetap UUID v4', uuidV4(dariSatu), dariSatu);
+  cek('dariByte([0xff]) versi tetap 4', dariSatu[14] === '4', dariSatu);
+  /*
+   * `0xff & 0x3f | 0x80` = 0xbf, dan `b` itu varian RFC 4122 yang sah. Yang
+   * salah kalau byte[8] dibiarkan apa adanya: byte itu bisa jadi 0x0f, yang
+   * menghasilkan varian 0 dan UUID di luar spesifikasi.
+   */
+  cek('dariByte([0xff]) varian tetap sah', '89ab'.includes(dariSatu[19]), dariSatu[19]);
+
+  // Byte > 0xff harus dipotong, bukan_byte_ meluap ke byte berikutnya dan
+  // menggeser seluruh UUID.
+  const byteLuap = new Array(16).fill(0);
+  byteLuap[0] = 0x1ff;
+  const dariLuap = dariByte(byteLuap);
+  cek('dariByte memotong byte di atas 0xff', dariLuap.slice(0, 8) === 'ff000000', dariLuap.slice(0, 8));
+
+  cek('dariByte([]) tidak melempar', typeof dariByte([]) === 'string', String(dariByte([])));
+
+  // --- Perbandingan HWID ---------------------------------------------------
+
+  cek(
+    'HWID sama meski huruf berbeda',
+    hardwareIdSama('4C4C4544-0030-4910-8045-C4C04F343332', '4c4c4544-0030-4910-8045-c4c04f343332'),
+  );
+  cek(
+    'HWID sama dengan dan tanpa tanda hubung',
+    hardwareIdSama('4c4c4544003049108045c4c04f343332', '4c4c4544-0030-4910-8045-c4c04f343332'),
+  );
+  cek(
+    'HWID berbeda tidak dianggap sama',
+    hardwareIdSama('4c4c4544-0030-4910-8045-c4c04f343332', '4c4c4544-0030-4910-8045-c4c04f343333') === false,
+  );
+  cek('HWID kosong tidak sama dengan yang lain', hardwareIdSama('', '') === false);
+  cek('HWID kosong tidak sama dengan teks', hardwareIdSama('   ', 'abc') === false);
+  cek('normalHardwareId membuang tanda hubung', normalHardwareId('AA-BB-CC') === 'aabbcc', normalHardwareId('AA-BB-CC'));
+
+  // --- Tampilan ------------------------------------------------------------
+
+  cek('rapikanTampil memangkas spasi tepi', rapikanTampil('  abc  ') === 'abc');
+  cek('rapikanTampil tidak memotong UUID', rapikanTampil(dariAcak) === dariAcak, dariAcak);
+  cek('rapikanTampil tidak mengubah huruf besar', rapikanTampil('ABC') === 'ABC');
+
+  // --- Aturan yang tidak bisa ditawar, dijaga di dalam kode ----------------
+
+  /*
+   * Dua pemeriksaan berbeda memakai dua bentuk sumber yang berbeda:
+   *
+   *   - `mentah` masih berisi komentar, dipakai untuk memeriksa ATURAN. Aturan
+   *     WMI memang ditulis sebagai komentar, jadi setelah komentar dibuang
+   *     namanya jadi hilang dan pemeriksaan ini tidak berarti apa-apa.
+   *   - `kode` sudah dibuang komentarnya, dipakai untuk memeriksa IMPLEMENTASI.
+   *     Nama pengenal produk boleh muncul di komentar aturan, tapi kemunculan
+   *     di kode berarti aturan itu dilanggar.
+   */
+  const mentah = baca('src', 'lib', 'hardware.ts');
+  const kode = polos(mentah);
+
+  cek(
+    'hardware.ts melarang Manufacturer dan Model sebagai bahan HWID',
+    mentah.includes('JANGAN PERNAH') &&
+      mentah.includes('Win32_ComputerSystem.Manufacturer') &&
+      mentah.includes('Win32_ComputerSystem.Model'),
+  );
+  cek(
+    'hardware.ts menunjuk Win32_ComputerSystemProduct sebagai sumber utama',
+    mentah.includes('Win32_ComputerSystemProduct'),
+  );
+  cek(
+    'hardware.ts menyebut Win32_BaseBoard.SerialNumber sebagai pelengkap',
+    mentah.includes('Win32_BaseBoard.SerialNumber'),
+  );
+  cek(
+    'hardware.ts mewajibkan nomor seri motherboard yang tidak kosong',
+    /tidak kosong|non-kosong/i.test(mentah),
+  );
+  cek(
+    'hardware.ts menyebut Diagnosis Value "Default string" sebagai nilai sampah',
+    /Default string/i.test(mentah),
+    'motherboard tanpa nomor seri sering berisi nilai ini',
+  );
+  cek(
+    'kode TIDAK memakai Manufacturer atau Model sebagai bahan HWID',
+    !/Manufacturer|ComputerSystem\.Model|Win32_OperatingSystem/.test(kode),
+    'nama pengenal produk hanya boleh muncul di komentar aturan',
+  );
+  cek(
+    'kode TIDAK membaca kolom Manufacturer lewat WMI',
+    !/select[^\n]*manufacturer/i.test(kode),
+  );
 }
 
 console.log(`\n== ${lulus} lulus, ${gagal} gagal ==`);
