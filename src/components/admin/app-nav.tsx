@@ -3,6 +3,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Package,
   Store,
   UserCog,
   UserPlus,
@@ -21,9 +22,12 @@ import { NAV_ITEMS, slotAktif, type NavHref } from '@/lib/nav';
  *  Sidebar sudah dihapus. Navigasi utama sekarang docked di bawah layar,
  *  persis seperti bar navigasi aplikasi native:
  *
- *   - 5 slot, ikon + label kecil, tinggi total 56px + safe-area bawah
+ *   - 6 slot, ikon + label kecil, tinggi total 56px + safe-area bawah
  *   - slot aktif diberi warna primer + label bolder
  *   - Android app: tidak ada hover state, hanya state "terpilih"
+ *
+ *  Jumlah slot tidak dibatasi CSS: tiap slot `flex-1`, jadi menambah menu
+ *  cukup menambah satu entri ke `NAV_ITEMS` + satu ikon ke `IKON`.
  *
  *  Di desktop bar tetap di bawah (bukan pindah ke atas/side) supaya
  *  posisinya konsisten di semua ukuran layar.
@@ -63,6 +67,7 @@ const IKON: Record<NavHref, LucideIcon> = {
   '/toko': Store,
   '/toko/baru': UserPlus,
   '/keys': KeyRound,
+  '/produk': Package,
   '/akun': UserCog,
 };
 

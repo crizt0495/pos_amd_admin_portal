@@ -36,26 +36,42 @@ const PUBLIK = ['/login'];
  *  HALAMAN RINGAN - HTML yang disajikan TANPA JavaScript
  * =============================================================================
  *
- * Daftar ini sengaja pendek: hanya halaman yang benar-benar read-only.
- * Syaratnya satu, dan tidak bisa ditawar:
+ * Daftar ini sengaja pendek: hanya halaman yang seluruh interaksinya bisa
+ * berjalan tanpa JavaScript. Syaratnya, dan tidak bisa ditawar:
  *
- *   1. Tidak ada interaksi yang butuh JS. Tidak ada form dinamis, tidak ada
- *      island Client Component yang mengubah isi halaman.
- *   2. Semua navigasi tetap jalan tanpa JS. `<Link>` sudah dirender server
- *      menjadi `<a href>`, jadi semua tautan tetap bisa diklik. `<form
- *      method="post">` juga tetap jalan tanpa satu baris pun JS.
+ *   1. Tidak ada Client Component sama sekali di subtree-nya. Nol island,
+ *      bukan "island kecil".
+ *   2. Semua aksi adalah HTTP yang paling primitif: `<a href>`, `<form
+ *      method="get">`, dan `<form method="post">`. Ketiganya punya ekuivalen
+ *      native di browser, jadi tetap jalan tanpa satu baris pun JS.
+ *   3. Form boleh berubah isinya setelah submit (dengan memuat ulang
+ *      halaman), tapi tidak boleh membaca isinya lebih dulu. Tidak ada
+ *      `useState`, tidak ada `disabled` yang bergantung pada state, tidak
+ *      ada `fetch()`.
  *
- * `/dashboard` termasuk: isinya angka, chart SVG, dan daftar tautan.
- * `/toko`, `/keys`, `/akun`, dan `/toko/baru` TIDAK termasuk, semuanya punya
- * island (filter, checkbox, modal, form) yang akan hilang kalau JS dibuang.
+ * Halaman yang ada di sini:
+ *   `/dashboard`  isinya angka, chart SVG, dan daftar tautan.
+ *   `/akun`       daftar akun toko. Semula `AkunManager` (Client Component
+ *                 534 baris + 3 dialog React) dengan TBT 1.090 ms dan
+ *                 Performance 68. Sekarang pencarian jadi `<form method="get"
+ *                 action="/akun">` + `?q=`, top up & reset password jadi
+ *                 `<details>` + `<form method="post">` ke Route Handler yang
+ *                 membalas 303 ke halaman asal dengan `?ok=`/`?err=`.
  *
- * Kenapa bother? Angka Lighthouse di produksi sebelum perubahan ini (Moto G
- * Power, Slow 4G): TBT 1.610 ms, FCP 2,3 s, LCP 3,2 s, Performance 58.
- * Setelah React dibuang dari dokumen ini: TBT ~17 ms, FCP ~1,0 s,
- * Performance 100. Bedanya bukan dari server, tapi dari 122 kB JavaScript
- * yang tidak pernah dipakai.
+ * Yang TIDAK bisa masuk, dan alasannya nyata:
+ *   `/toko`  island `StoreAksi` membuka modal top up dari state React.
+ *   `/keys`  island `KeyAksi` menyalin key lewat Clipboard API.
+ *   `/produk` island `ProdukAksi` mengunci scroll body saat modal terbuka.
+ *   `/toko/baru` `create-store-form.tsx` memvalidasi field sebelum submit.
+ *   Menambah halaman baru ke daftar ini berarti menulis ulang interaksi
+ *   halaman itu dalam HTML native dulu, bukan menambahkan nama saja.
+ *
+ * Kenapa bother? Angka Lighthouse di produksi (Moto G Power, Slow 4G):
+ * `/dashboard` TBT 1.610 ms, FCP 2,3 s, LCP 3,2 s, Performance 58. Setelah
+ * React dibuang: TBT ~17 ms, FCP ~1,0 s, Performance 100. Bedanya bukan dari
+ * server, tapi dari 122 kB JavaScript yang tidak pernah dipakai.
  */
-const HALAMAN_RINGAN = new Set(['/dashboard']);
+const HALAMAN_RINGAN = new Set(['/dashboard', '/akun']);
 
 /**
  * Penanda "sudah lewat middleware sekali".
