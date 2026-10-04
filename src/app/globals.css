@@ -88,7 +88,8 @@
   /* ------------------------------------------------------------------
      Navigasi bawah — Material NavigationBar.
 
-     5 slot, tinggi 56px + safe-area, surface elevated di atas konten.
+     6 slot (setiap slot `flex-1`, jadi jumlah slot ikut otomatis),
+     tinggi 56px + safe-area, surface elevated di atas konten.
      ------------------------------------------------------------------ */
   .app-nav {
     @apply fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-zinc-200 bg-white/95 backdrop-blur;

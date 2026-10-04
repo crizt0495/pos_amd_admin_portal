@@ -3,10 +3,14 @@ import 'server-only';
 import { cache } from 'react';
 
 import {
+  demoBuatProduk,
   demoCariStore,
   demoDashboard,
+  demoHapusProduk,
   demoKeys,
   demoKeysToko,
+  demoPatchProduk,
+  demoProduk,
   demoStores,
   demoTopupsToko,
 } from '@/lib/demo/data';
@@ -14,10 +18,13 @@ import { demoAktif } from '@/lib/demo/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/supabase/guard';
 import { hariSingkat, tanggalPendek } from '@/lib/format';
+import { hitungEstimasiKomisi, rapikanProduk, produkError } from '@/lib/produk';
 import type {
   DashboardSummary,
   Key,
   LicenseStatus,
+  Produk,
+  ProdukInput,
   SalesPoint,
   Store,
   TopupHistory,
@@ -38,7 +45,10 @@ const KOLOM_STORE =
   'id, user_id, nama_toko, email, username, no_hp, alamat, tier, total_terjual, sisa_kuota, komisi_total, is_active, status, created_at, updated_at';
 
 const KOLOM_KEY =
-  'id, serial_key, store_id, nama_toko, nama_pembeli, telepon, alamat_pembeli, paket, pilihan, komisi, tier, tier_rate, status, hwid_locked, device_name, activated_at, expires_at, created_at';
+  'id, serial_key, store_id, nama_toko, nama_pembeli, telepon, alamat_pembeli, paket, pilihan, komisi, tier, tier_rate, status, hwid_locked, device_name, activated_at, expires_at, created_at, produk_id, produk_nama, harga_produk_acuan';
+
+/** Katalog produk — seluruh kolomnya memang dipakai UI, jadi SELECT *. */
+const KOLOM_PRODUK = 'id, nama_apariksi, harga_sekali_bayar, harga_langganan_tahunan, deskripsi, created_at';
 
 /** Namai helper ini biar jelas:_fn yang melempar kalau bukan admin. */
 async function wajibAdmin() {
@@ -82,14 +92,23 @@ export const getDashboard = cache(async (): Promise<{
    * jumlah toko. KOLOM yang diambil sengaja hanya kolom agregat supaya payload
    *-nya tetap kecil walaupun jumlah toko bertambah.
    */
-  const [agregatStore, komisiPending, terbaru, salesRaw] = await Promise.all([
+  const [agregatStore, keyAktif, terbaru, salesRaw] = await Promise.all([
     db.from('admin_stores').select('total_terjual, sisa_kuota, komisi_total'),
-    // "Komisi pending" = komisi dari key yang BELUM dipakai pembeli
-    // (status belum 'active'), yaitu uang yang sudah tercatat tapi belum cair.
-    db
-      .from('admin_keys')
-      .select('komisi, status')
-      .in('status', ['unused', 'blocked', 'revoked']),
+    /*
+     * "Estimasi komisi" = 20% x harga produk acuan, dari key yang SUDAH AKTIF.
+     *
+     * Query ini menggantikan "Komisi Pending" yang dulu menjumlahkan komisi
+     * key yang belum dipakai. Bedanya bukan soal rumus, tapi soal arti: komisi
+     * pending menghitung key yang belum terjual sama sekali, sehingga
+     *ashboard menampilkan angka komisi besar padahal belum ada satu rupiah pun
+     * yang masuk.
+     *
+     * `harga_produk_acuan` sudah dihitung di view `admin_keys` (harga sesuai
+     * jenis lisensi: sekali bayar atau langganan/tahun), jadi di sini hanya
+     * `harga_produk_acuan` yang diambil — bukan `produk_id`, `pilihan`, atau
+     * harga mentahnya.
+     */
+    db.from('admin_keys').select('harga_produk_acuan').eq('status', 'active'),
     db
       .from('admin_stores')
       .select(KOLOM_STORE)
@@ -106,7 +125,8 @@ export const getDashboard = cache(async (): Promise<{
   const totalKeyTerjual = barisStore.reduce((s, r) => s + (r.total_terjual ?? 0), 0);
   const totalKeySisa = barisStore.reduce((s, r) => s + (r.sisa_kuota ?? 0), 0);
   const komisiTotalNilai = barisStore.reduce((s, r) => s + (r.komisi_total ?? 0), 0);
-  const komisiPendingNilai = (komisiPending.data ?? []).reduce((s, r) => s + (r.komisi ?? 0), 0);
+
+  const { estimasi, tercakup } = hitungEstimasiKomisi(keyAktif.data ?? []);
 
   // Rakit deret 7 hari (hari tanpa key tetap ada, nilainya 0) supaya
   // spacing chart-nya evenly spaced.
@@ -135,8 +155,9 @@ export const getDashboard = cache(async (): Promise<{
       totalToko,
       totalKeyTerjual,
       totalKeySisa,
-      komisiPending: komisiPendingNilai,
+      estimasiKomisi: estimasi,
       komisiTotal: komisiTotalNilai,
+      keyAktifBer_acuan: tercakup,
     },
     stores: (terbaru.data ?? []) as Store[],
     sales,
@@ -480,3 +501,152 @@ export const getKeys = cache(async (params: ParamsKey = {}): Promise<HasilKey> =
     totalHalaman: Math.max(1, Math.ceil(total / perHalaman)),
   };
 });
+
+/* ------------------------------------------------------------------ */
+/* Katalog produk                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Daftar produk untuk halaman `/produk`, terbaru dulu.
+ *
+ * Tidak dipaginasi. Katalog produk sengaja jauh lebih kecil daripada daftar
+ * toko atau key (satu baris per jenis aplikasi yang dijual), jadi seluruhnya
+ * muat di satu layar dan pagination di sini hanya menambah rumit tanpa
+ * manfaat.
+ *
+ * Kolom yang diambil sudah lewat `KOLOM_PRODUK`, bukan `select *`, supaya
+ * kolom database yang ditambahkan belakangan tidak ikut terbawa diam-diam.
+ */
+export const getProduk = cache(async (): Promise<Produk[]> => {
+  await wajibAdmin();
+
+  if (demoAktif) return demoProduk();
+
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from('produk')
+    .select(KOLOM_PRODUK)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Gagal memuat produk: ${error.message}`);
+  return (data ?? []) as Produk[];
+});
+
+export type HasilSimpanProduk =
+  | { ok: true; produk: Produk }
+  | { ok: false; error: string };
+
+/**
+ * Simpan produk baru atau ubah produk yang sudah ada.
+ *
+ * `id` kosong = tambah, `id` terisi = ubah. Satu fungsi untuk dua keperluan
+ * supaya validasi dan pembersihan input tidak pernah bisa berbeda antara
+ * "tambah" dan "edit".
+ *
+ * Validasi memakai `produkError()` yang sama dengan form di browser. Ini bukan
+ * pengulangan yang sia-sia: harga negatif atau nama kosong yang lolos ke
+ * database akan langsung merusak angka "Estimasi Komisi".
+ */
+export const simpanProduk = cache(
+  async (id: string | null, mentah: unknown): Promise<HasilSimpanProduk> => {
+    await wajibAdmin();
+
+    const p = rapikanProduk(
+      (mentah ?? {}) as {
+        nama_apariksi?: unknown;
+        harga_sekali_bayar?: unknown;
+        harga_langganan_tahunan?: unknown;
+        deskripsi?: unknown;
+      },
+    );
+
+    const err = produkError(p);
+    if (err) return { ok: false, error: err };
+
+    if (demoAktif) {
+      if (id) {
+        const berubah = demoPatchProduk(id, p as ProdukInput);
+        if (!berubah) return { ok: false, error: 'Produk tidak ditemukan.' };
+        return { ok: true, produk: berubah };
+      }
+      return { ok: true, produk: demoBuatProduk(p) };
+    }
+
+    const db = createAdminClient();
+
+    if (id) {
+      const { data, error } = await db
+        .from('produk')
+        .update({
+          nama_apariksi: p.nama_apariksi,
+          harga_sekali_bayar: p.harga_sekali_bayar,
+          harga_langganan_tahunan: p.harga_langganan_tahunan,
+          deskripsi: p.deskripsi,
+        })
+        .eq('id', id)
+        .select(KOLOM_PRODUK)
+        .maybeSingle();
+
+      if (error) return { ok: false, error: `Gagal menyimpan produk: ${error.message}` };
+      if (!data) return { ok: false, error: 'Produk tidak ditemukan.' };
+      return { ok: true, produk: data as Produk };
+    }
+
+    const { data, error } = await db
+      .from('produk')
+      .insert({
+        nama_apariksi: p.nama_apariksi,
+        harga_sekali_bayar: p.harga_sekali_bayar,
+        harga_langganan_tahunan: p.harga_langganan_tahunan,
+        deskripsi: p.deskripsi,
+      })
+      .select(KOLOM_PRODUK)
+      .single();
+
+    if (error) return { ok: false, error: `Gagal menyimpan produk: ${error.message}` };
+    return { ok: true, produk: data as Produk };
+  },
+);
+
+/**
+ * Hapus satu produk dari katalog.
+ *
+ * `licenses.produk_id` memakai `on delete set null`, jadi key yang sudah
+ * terjual tidak ikut terhapus. Yang hilang adalah acuan harganya: key itu
+ * menyumbang 0 ke estimasi komisi sampai ditautkan ke produk lain.
+ *
+ * Return jumlah key yang kehilangan acuan supaya UI bisa memperingatkan
+ * konsekuensinya, bukan hanya melaporkan "berhasil".
+ */
+export const hapusProduk = cache(
+  async (id: string): Promise<{ ok: true; nama: string; kehilangan: number } | { ok: false; error: string }> => {
+    await wajibAdmin();
+
+    if (demoAktif) {
+      const hasil = demoHapusProduk(id);
+      if (!hasil) return { ok: false, error: 'Produk tidak ditemukan.' };
+      return { ok: true, nama: hasil.nama, kehilangan: hasil.kehilangan };
+    }
+
+    const db = createAdminClient();
+
+    // Hitung dulu berapa key yang memakai produk ini, supaya pesan konsekuensi
+    // yang ditampilkan ke admin akurat meski penghapusannya sendiri berhasil.
+    const { count } = await db
+      .from('admin_keys')
+      .select('id', { count: 'exact', head: true })
+      .eq('produk_id', id);
+
+    const { data, error } = await db
+      .from('produk')
+      .delete()
+      .eq('id', id)
+      .select('nama_apariksi')
+      .maybeSingle();
+
+    if (error) return { ok: false, error: `Gagal menghapus produk: ${error.message}` };
+    if (!data) return { ok: false, error: 'Produk tidak ditemukan.' };
+
+    return { ok: true, nama: data.nama_apariksi as string, kehilangan: count ?? 0 };
+  },
+);

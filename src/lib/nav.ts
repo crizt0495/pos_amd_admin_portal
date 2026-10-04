@@ -28,6 +28,7 @@ export const NAV_ITEMS = [
   { href: '/toko', label: 'Toko', short: 'Toko' },
   { href: '/toko/baru', label: 'Daftar Toko Baru', short: 'Daftar' },
   { href: '/keys', label: 'Semua Key', short: 'Key' },
+  { href: '/produk', label: 'Produk', short: 'Produk' },
   { href: '/akun', label: 'Akun Toko', short: 'Akun' },
 ] as const;
 
