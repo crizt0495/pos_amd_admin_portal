@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start -p 3100",
     "lint": "next lint",
+    "test:csp": "node scripts/test-csp.mjs",
     "typecheck": "tsc --noEmit",
     "check:supabase": "node scripts/check-supabase.mjs",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs"

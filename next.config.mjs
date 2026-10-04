@@ -33,14 +33,17 @@ const nextConfig = {
          * Tanpa pengecualian ini, favicon ikut terkirim ulang tiap muat halaman
          * (terukur `private, no-store, max-age=0`). Hash aset di `/_next/static`
          * sudah immutable dari sisi Next, tapi `/public/*` tidak.
+         *
+         * Header KEAMANAN (CSP, COOP, X-Frame-Options, X-Content-Type-Options,
+         * Referrer-Policy) SENGAJA TIDAK ada di sini — semuanya ada di
+         * `src/middleware.ts` lewat `securityHeaders()`. Alasannya, CSP halaman
+         * Next memakai nonce yang berbeda tiap request sehingga tidak mungkin
+         * ditulis sebagai header statis di sini; dengan memusatkannya di satu
+         * tempat, `/login` (yang keluar dari middleware lebih awal) dan halaman
+         * lain dijamin memakai kebijakan yang sama persis.
          */
         source: '/:path((?!_next/static|icon.svg|manifest.webmanifest|robots.txt|favicon.ico).*)',
-        headers: [
-          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'same-origin' },
-        ],
+        headers: [{ key: 'Cache-Control', value: 'private, no-store, max-age=0' }],
       },
       {
         // Aset dari `public/` yang namanya stabil (tanpa hash) — cache sebentar,
