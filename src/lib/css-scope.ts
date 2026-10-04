@@ -34,20 +34,6 @@
  * aman dipanggil dari middleware yang jalan di runtime Edge.
  */
 
-/**
- * Nama kelas di dalam selector CSS.
- *
- * Dua hal yang wajib ditangani:
- *
- * - Escape CSS. Tailwind menulis `.mt-0\.5`, `.top-1\/2`, dan `.z-\[60\]`
- *   supaya selector-nya tetap valid, sedangkan di HTML kelasnya ditulis polos
- *   (`mt-0.5`). Kalau tidak di-unescape, kelas `mt-0.5` tidak akan pernah
- *   cocok dan aturannya ikut terbuang.
- * - Pemisah selector: spasi, `>+~(){}[]"'.,:|#*`. Pasangan `\\.` di dalam
- *   kelas menyatakan satu karakter yang ter-escape dan boleh ikut.
- */
-const RE_KELAS_SELECTOR = /\.(?:\\.|[^\s>+~(){}\[\]"'.,:|#*])+/g;
-
 /** `class="..."` atau `class='...'` pada markup hasil render App Router. */
 const RE_CLASS_ATTR = /\sclass=(?:"([^"]*)"|'([^']*)')/g;
 
@@ -62,9 +48,10 @@ const RE_LISENSI = /^\s*\/\*![\s\S]*?\*\//;
  * Isinya bisa memuat titik, dan titik itu bukan nama kelas.
  *
  * TIDAK bisa dibuang dengan regex biasa: kurung siku yang ter-escape milik NAMA
- * KELAS (`.text-\[17px\]`) ikut kena, sehingga kelasnya jadi tidak terbaca dan
+ * KELAS (`.z-\[60\]`) ikut kena, sehingga kelasnya jadi tidak terbaca dan
  * aturannya terbuang. Karena itu penyaringan dilakukan dengan pemindaian
- * karakter yang menghormati escape.
+ * karakter yang menghormati escape, dan kurung siku milik nama kelas hanya
+ * dibuang kalau TIDAK didahului backslash.
  */
 function selectorBersih(selector: string): string {
   let keluar = '';
@@ -114,20 +101,115 @@ export function kelasDipakai(html: string): Set<string> {
   return hasil;
 }
 
-/** Buang escape CSS: `mt-0\.5` menjadi `mt-0.5`. */
-function unescape(kelas: string): string {
-  return kelas.includes('\\') ? kelas.replace(/\\(.)/g, '$1') : kelas;
+const HEX = /[0-9a-fA-F]/;
+const SPASI = /[ \n\t\r\f]/;
+
+/**
+ * Baca SATU escape CSS yang dimulai di `src[i]` (karakter di sana '\\').
+ *
+ * Ada dua bentuk, sesuai spesifikasi:
+ *   1. Heksadesimal: `\2c` atau `\2c ` (satu whitespace sebagai terminator).
+ *      Tailwind memakai bentuk INI untuk koma di dalam nilai arbitrer, dan itu
+ *      penyebab utama `lg:grid-cols-[34px_minmax(140px,1.2fr)_...]` pernah
+ *      gagal dikenali: koma di CSS-nya jadi `\2c ` (dengan spasi), sedangkan di
+ *      HTML tidak ada spasi sama sekali.
+ *   2. Karakter tunggal: `\:`, `\.`, `\[`.
+ *
+ * Yang dikembalikan adalah karakter HASIL DEKODE-nya, bukan teks aslinya,
+ * supaya bisa dibandingkan langsung dengan nilai `class` di HTML.
+ */
+function bacaEscape(src: string, i: number): { chr: string; akhir: number } | null {
+  let j = i + 1;
+  let hex = '';
+
+  while (j < src.length && hex.length < 6 && HEX.test(src[j])) {
+    hex += src[j];
+    j++;
+  }
+
+  if (hex.length > 0) {
+    // Satu whitespace sesudah hex escape adalah bagian dari escape itu sendiri,
+    // bukan pemisah selector. Kalau tidak dimakan, nama kelas jadi terpotong.
+    if (j < src.length && SPASI.test(src[j])) j++;
+    const cp = parseInt(hex, 16);
+    return { chr: cp === 0 || cp > 0x10ffff ? '\uFFFD' : String.fromCodePoint(cp), akhir: j };
+  }
+
+  if (j < src.length && src[j] !== '\n' && src[j] !== '\r' && src[j] !== '\f') {
+    return { chr: src[j], akhir: j + 1 };
+  }
+
+  return null;
 }
 
 /**
- * Daftar kelas (sudah di-unescape) yang disebut sebuah selector.
+ * Baca satu identifier CSS mulai dari posisi `awal`, lalu kembalikan nilainya
+ * yang sudah didekode beserta posisi setelahnya.
+ *
+ * Aturan berhentinya sengaja sempit, dan itu inti dari file ini. Karakter yang
+ * DIJADIKAN pemisah di dalam selector (`:` untuk pseudo-class, `,` untuk daftar
+ * selector, `.` untuk kelas berikutnya, `(` `)` untuk `:is()`, `[` `]` untuk
+ * atribut) TIDAK boleh menghentikan pembacaan, karena semuanya bisa muncul di
+ * dalam nama kelas Tailwind sebagai karakter ter-escape. Contoh nyata yang
+ * pernah rusak: `lg:grid-cols-[34px_minmax(140px,1.2fr)_minmax(148px,1.2fr)]`
+ * terpotong di titik desimal `1.2fr` lalu tidak pernah cocok dengan HTML.
+ *
+ * Yang benar-benar menghentikan hanya:
+ *   - whitespace (pemisah descendant)
+ *   - `>+~` (combinator)
+ *   - `{`, `}`, `;` (batas blok)
+ *   - `*`, `#`, `"`, `'`
+ *   - `,` dan `:` yang tidak ter-escape (pemisah selector, bukan isi nama)
+ */
+function bacaIdentCss(src: string, awal: number): { nilai: string; akhir: number } {
+  let nilai = '';
+  let i = awal;
+
+  while (i < src.length) {
+    const c = src[i];
+
+    if (c === '\\') {
+      const esc = bacaEscape(src, i);
+      if (!esc) break;
+      nilai += esc.chr;
+      i = esc.akhir;
+      continue;
+    }
+
+    if (c === ',' || c === ':') break;
+    if (/[A-Za-z0-9_-]/.test(c) || c.charCodeAt(0) > 0x7f) {
+      nilai += c;
+      i++;
+      continue;
+    }
+
+    break;
+  }
+
+  return { nilai, akhir: i };
+}
+
+/**
+ * Daftar kelas (sudah di-dekode) yang disebut sebuah selector.
  *
  * Selector atribut dan string dibuang lebih dulu (lihat `selectorBersih`).
  */
 function kelasDiSelector(selector: string): string[] {
   const bersih = selectorBersih(selector);
   const hasil: string[] = [];
-  for (const m of bersih.matchAll(RE_KELAS_SELECTOR)) hasil.push(unescape(m[0].slice(1)));
+  let i = 0;
+
+  while (i < bersih.length) {
+    if (bersih[i] !== '.') {
+      i++;
+      continue;
+    }
+    const ident = bacaIdentCss(bersih, i + 1);
+    if (ident.nilai.length > 0) hasil.push(ident.nilai);
+    // Selalu maju minimal satu karakter supaya loop pasti berhenti.
+    i = Math.max(ident.akhir, i + 1);
+  }
+
   return hasil;
 }
 
