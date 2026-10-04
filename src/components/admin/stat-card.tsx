@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Inbox, KeyRound, Store, Wallet } from 'lucide-react';
 
 import { angkaRingkas, rupiahRingkas } from '@/lib/format';
+import { PERSEN_ESTIMASI_KOMISI } from '@/lib/produk';
 import { cn } from '@/lib/utils';
 
 export interface StatData {
@@ -38,17 +39,33 @@ export function StatCard({ label, nilai, format = 'angka', sub, Icon, tone = 'ne
   );
 }
 
-/** Empat kartu utama sesuai spec dashboard. */
+/**
+ * Empat kartu utama sesuai spec dashboard.
+ *
+ * Kartu keempat adalah "Estimasi Komisi". Semula labelnya "Komisi Pending" dan
+ * isinya jumlah komisi dari key yang BELUM dipakai. Angka itu diganti karena
+ * bikin salah baca: komisi baru benar-benar masuk setelah key dipakai di
+ * komputer kasir, sedangkan kartu lama menjumlahkan key yang belum terjual
+ * sama sekali. Sekarang isinya 20% dari harga produk acuan, key `active` saja.
+ *
+ * "N key aktif" sengaja disebut di sub-teks: estimasi ini HANYA menghitung key
+ * yang punya acuan harga produk. Kalau tidak disebut, angka yang turun drastis
+ * karena ada key belum tertaut produk akan terlihat seperti penjualan sedang
+ * sepi, padahal masalahnya datanya.
+ */
 export function DashboardStats({
   totalToko,
   totalKeyTerjual,
   totalKeySisa,
-  komisiPending,
+  estimasiKomisi,
+  keyTercakup,
 }: {
   totalToko: number;
   totalKeyTerjual: number;
   totalKeySisa: number;
-  komisiPending: number;
+  estimasiKomisi: number;
+  /** Key aktif yang punya acuan harga produk (dasar hitungan estimasi). */
+  keyTercakup?: number;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -71,11 +88,15 @@ export function DashboardStats({
         sub="kuota yang masih bisa digenerate"
       />
       <StatCard
-        label="Komisi Pending"
-        nilai={komisiPending}
+        label="Estimasi Komisi"
+        nilai={estimasiKomisi}
         format="rupiah"
         Icon={Wallet}
-        sub="dari key yang belum dipakai"
+        sub={
+          keyTercakup !== undefined
+            ? `${PERSEN_ESTIMASI_KOMISI * 100}% x harga produk · ${keyTercakup} key aktif`
+            : `${PERSEN_ESTIMASI_KOMISI * 100}% x harga produk acuan`
+        }
       />
     </div>
   );

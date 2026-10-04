@@ -43,7 +43,8 @@ export default async function DashboardPage() {
         totalToko={summary.totalToko}
         totalKeyTerjual={summary.totalKeyTerjual}
         totalKeySisa={summary.totalKeySisa}
-        komisiPending={summary.komisiPending}
+        estimasiKomisi={summary.estimasiKomisi}
+        keyTercakup={summary.keyAktifBer_acuan}
       />
 
       {/* Chart + catatan */}
