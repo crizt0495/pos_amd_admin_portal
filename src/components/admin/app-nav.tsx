@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import {
   KeyRound,
   LayoutDashboard,
@@ -80,21 +79,23 @@ export function AppNav({ pathname }: { pathname: string }) {
       {ITEMS.map(({ href, short, Icon }) => {
         const aktif = slotAktif(href, pathname);
         return (
-          <Link
+          <a
             key={href}
             href={href}
-            // Bar bawah selalu terlihat, jadi Next akan auto-prefetch kelima
-            // route begitu halaman terbuka. Prefetch itu berebut bandwidth
-            // dengan LCP saat load pertama, dan tiap prefetch `/_rsc=` juga
-            // menjalankan render server penuh untuk halaman tuanya. Dimatikan;
-            // navigasi berikutnya tetap cepat karena RSC-nya di-cache router.
-            prefetch={false}
+            // PENTING: sengaja BUKAN <Link>. Dengan <Link>, Next memelihara
+            // cache RSC di browser + layout yang persisten, sehingga judul
+            // topbar dan slot hitam navigasi basalenya TIDAK ikut berubah
+            // saat klik antar halaman (temuan uji Playwright: judul
+            // tertinggal). <a> menanggung biaya full reload — tapi setiap
+            // halaman admin kecil (±5–10 KB CSS inlined), dan halaman ringan
+            // tanpa React tetap jalan. Semua route sudah dinamis, jadi tidak
+            // ada cache yang dikorbankan.
             aria-current={aktif ? 'page' : undefined}
             className={cn('app-nav-item', aktif && 'app-nav-item-active')}
           >
             <Icon className="app-nav-icon" strokeWidth={aktif ? 2.4 : 2} />
             <span className="app-nav-label">{short}</span>
-          </Link>
+          </a>
         );
       })}
     </nav>
