@@ -52,7 +52,7 @@ export function KeyPerpanjang({
 
   return (
     <Button size="sm" variant="outline" loading={busy} disabled={busy} onClick={perpanjang}>
-      Perpanjang +1 Tahun{hargaAcuan > 0 ? ` · +Rp ${komisiTambahan.toLocaleString('id-ID')}` : ''}
+      Perpanjang +12 Bulan (1 Tahun){hargaAcuan > 0 ? ` · +Rp ${komisiTambahan.toLocaleString('id-ID')}` : ''}
     </Button>
   );
 }

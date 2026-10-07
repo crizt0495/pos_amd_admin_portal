@@ -26,7 +26,7 @@ export async function POST(_req: Request, { params }: Ctx) {
     const hasil = demoPerpanjangKey(params.id);
     if (!hasil) return jsonGagal('Key tidak ditemukan atau bukan langganan.', 404);
     return jsonOk(
-      `Langganan diperpanjang 1 tahun. Komisi Rp ${hasil.komisi.toLocaleString('id-ID')} tercatat.`,
+      `Langganan diperpanjang +12 bulan (1 tahun). Komisi Rp ${hasil.komisi.toLocaleString('id-ID')} tercatat.`,
       hasil,
     );
   }
@@ -51,7 +51,7 @@ export async function POST(_req: Request, { params }: Ctx) {
   const komisi = Number(row?.komisi ?? 0);
 
   return jsonOk(
-    `Langganan diperpanjang 1 tahun. Komisi Rp ${komisi.toLocaleString('id-ID')} tercatat.`,
+    `Langganan diperpanjang +12 bulan (1 tahun). Komisi Rp ${komisi.toLocaleString('id-ID')} tercatat.`,
     { expires_at: row?.expires_at ?? null, komisi },
   );
 }

@@ -122,10 +122,18 @@ export function KeyDaftar({ keys }: { keys: Key[] }) {
               <span>{LICENSE_TYPE_LABEL[k.pilihan]}</span>
               {k.pilihan === 'langganan' ? (
                 <div className="mt-1 text-[11px] leading-snug text-zinc-500">
-                  <div>Expired: {k.expires_at ? tanggalPanjang(k.expires_at) : '-'}</div>
+                  <div>Langganan Bulanan (Paket 12 Bulan)</div>
                   <div>
-                    Bulan ke-{k.langganan_bulan_terakhir} dari 12 · Terbayar{' '}
-                    {rupiah(k.langganan_komisi_terbayar)}
+                    Periode Aktif: {tanggalPanjang(k.created_at)} s/d{' '}
+                    {k.expires_at ? tanggalPanjang(k.expires_at) : '-'} (Sisa{' '}
+                    {k.expires_at
+                      ? Math.max(0, Math.ceil((new Date(k.expires_at).getTime() - Date.now()) / (365.25 * 24 * 60 * 60 * 1000)))
+                      : 0}{' '}
+                    thn)
+                  </div>
+                  <div>
+                    Progress: Bulan ke-{k.langganan_bulan_terakhir} dari 12 bulan paket tahunan ·
+                    Terbayar {rupiah(k.langganan_komisi_terbayar)}
                   </div>
                 </div>
               ) : null}
