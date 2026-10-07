@@ -45,7 +45,7 @@ const KOLOM_STORE =
   'id, user_id, nama_toko, email, username, no_hp, alamat, tier, total_terjual, sisa_kuota, komisi_total, is_active, status, created_at, updated_at';
 
 const KOLOM_KEY =
-  'id, serial_key, store_id, nama_toko, nama_pembeli, telepon, alamat_pembeli, paket, pilihan, komisi, tier, tier_rate, status, hwid_locked, device_name, activated_at, expires_at, created_at, produk_id, produk_nama, harga_produk_acuan';
+  'id, serial_key, store_id, nama_toko, nama_pembeli, telepon, alamat_pembeli, paket, pilihan, komisi, tier, tier_rate, status, hwid_locked, device_name, activated_at, expires_at, created_at, produk_id, produk_nama, harga_produk_acuan, langganan_bulan_terakhir, langganan_komisi_terbayar';
 
 /** Katalog produk — seluruh kolomnya memang dipakai UI, jadi SELECT *. */
 const KOLOM_PRODUK = 'id, nama_apariksi, harga_sekali_bayar, harga_langganan_tahunan, deskripsi, created_at';

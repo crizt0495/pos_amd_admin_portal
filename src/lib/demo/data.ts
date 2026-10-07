@@ -266,6 +266,8 @@ function seedUlang(): void {
         produk_nama: p?.nama_apariksi ?? null,
         // Sama seperti `admin_keys`: harga sesuai jenis lisensi, 0 kalau belum ada.
         harga_produk_acuan: hargaAcuan(p, pilihan) ?? 0,
+        langganan_bulan_terakhir: 0,
+        langganan_komisi_terbayar: 0,
       });
       seqKey += 1;
     }
@@ -475,6 +477,24 @@ export function demoSetKeyStatus(
   }
   hitungKomisiTotal();
   return { serial_key: k.serial_key, status };
+}
+
+/** Meniru RPC `admin_perpanjang_langganan` untuk mode demo. */
+export function demoPerpanjangKey(
+  id: string,
+): { serial_key: string; expires_at: string; komisi: number } | null {
+  const k = keys.find((x) => x.id === id);
+  if (!k) return null;
+  if (k.pilihan !== 'langganan') return null;
+
+  const komisi = Math.round(k.harga_produk_acuan * 0.05);
+  const dasar = k.expires_at && new Date(k.expires_at) > new Date() ? new Date(k.expires_at) : new Date();
+  dasar.setFullYear(dasar.getFullYear() + 1);
+  k.expires_at = dasar.toISOString();
+  k.langganan_bulan_terakhir = Math.min(12, k.langganan_bulan_terakhir + 1);
+  k.langganan_komisi_terbayar += komisi;
+  hitungKomisiTotal();
+  return { serial_key: k.serial_key, expires_at: k.expires_at, komisi };
 }
 
 export function demoPatchStore(id: string, patch: Partial<Store>): Store | null {

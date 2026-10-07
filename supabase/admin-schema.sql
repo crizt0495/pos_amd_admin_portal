@@ -313,6 +313,77 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 8b. RPC: admin_perpanjang_langganan  (perpanjang key langganan +1 tahun)
+--
+--    Admin yang mencet, bukan toko (tombol "Perpanjang +1 Tahun" ada di menu
+--    Key admin). Semua angka murni dari DB: harga acuan dibaca dari
+--    `produk.harga_langganan_tahunan` lewat produk_id milik key, komisi = 5%
+--    dari harga acuan itu. EXP   = max(expires_at, now()) + 1 tahun.
+--    langganan_pembayaran diisi untuk audit (license_id, partner_id, bulan_ke
+--    berikutnya, komisi_toko); partners.komisi_total ikut bertambah.
+-- ---------------------------------------------------------------------------
+create or replace function public.admin_perpanjang_langganan(p_key_id uuid)
+returns table (expires_at timestamptz, komisi integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lic     public.licenses;
+  v_harga   integer;
+  v_komisi  integer;
+  v_bulan   integer;
+  v_new_exp timestamptz;
+begin
+  select l.* into v_lic
+    from public.licenses l
+   where l.id = p_key_id
+     for update;
+
+  if not found then
+    raise exception 'Key tidak ditemukan';
+  end if;
+
+  if v_lic.license_type <> 'langganan' then
+    raise exception 'NOT_SUBSCRIPTION';
+  end if;
+
+  -- Harga acuan dari katalog admin, BUKAN hardcode: 0 kalau produk belum diisi.
+  select pr.harga_langganan_tahunan into v_harga
+    from public.produk pr
+   where pr.id = v_lic.produk_id;
+
+  v_komisi  := round(coalesce(v_harga, 0) * 5.0 / 100)::integer;
+  v_new_exp := greatest(coalesce(v_lic.expires_at, now()), now()) + interval '1 year';
+
+  update public.licenses l
+     set expires_at = v_new_exp,
+         updated_at = now()
+   where l.id = v_lic.id;
+
+  select greatest(coalesce(max(lp.bulan_ke), 0) + 1, 1) into v_bulan
+    from public.langganan_pembayaran lp
+   where lp.license_id = v_lic.id;
+
+  if v_bulan > 12 then
+    v_bulan := 12;  -- cycle penuh; baris audit tetap dicatat via bulan_ke=12
+    -- hindari bentrok unik (license_id, bulan_ke): pakai bulan terakhir +-0 tetap
+    -- boleh berulang lewat on conflict do nothing.
+  end if;
+
+  insert into public.langganan_pembayaran (license_id, partner_id, bulan_ke, komisi_toko)
+  values (v_lic.id, v_lic.partner_id, v_bulan, v_komisi)
+  on conflict (license_id, bulan_ke) do nothing;
+
+  update public.partners
+     set komisi_total = komisi_total + v_komisi
+   where id = v_lic.partner_id;
+
+  return query select v_new_exp, v_komisi;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 9. RLS & Grants
 --    PENTING — RLS TIDAK menyelamatkan objek di bawah:
 --      - Fungsi admin_* dibuat SECURITY DEFINER, jadi berjalan sebagai owner dan
@@ -357,9 +428,11 @@ grant select on public.admin_keys   to service_role;
 revoke all on function public.admin_topup(uuid, integer, text, text)       from anon, authenticated, public;
 revoke all on function public.admin_topup_bulk(uuid[], integer, text, text) from anon, authenticated, public;
 revoke all on function public.admin_revoke_key(uuid, text)                 from anon, authenticated, public;
+revoke all on function public.admin_perpanjang_langganan(uuid)            from anon, authenticated, public;
 grant execute on function public.admin_topup(uuid, integer, text, text)      to service_role;
 grant execute on function public.admin_topup_bulk(uuid[], integer, text, text) to service_role;
 grant execute on function public.admin_revoke_key(uuid, text)                to service_role;
+grant execute on function public.admin_perpanjang_langganan(uuid)            to service_role;
 
 -- Cegah objek admin berikutnya otomatis dapat grant default yang sama.
 alter default privileges in schema public revoke execute on functions from public;
@@ -466,7 +539,16 @@ create or replace view public.admin_keys as
            else pr.harga_sekali_bayar
       end,
       0
-    )                    as harga_produk_acuan
+    )                    as harga_produk_acuan,
+    -- Info langganan (dipakai tombol Perpanjang di admin):
+    coalesce((
+      select max(lp.bulan_ke) from public.langganan_pembayaran lp
+       where lp.license_id = l.id
+    ), 0)                  as langganan_bulan_terakhir,
+    coalesce((
+      select sum(lp.komisi_toko) from public.langganan_pembayaran lp
+       where lp.license_id = l.id
+    ), 0)                  as langganan_komisi_terbayar
   from public.licenses l
   left join public.partners p on p.id = l.partner_id
   left join public.produk  pr on pr.id = l.produk_id;

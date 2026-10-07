@@ -1,11 +1,12 @@
 import { KeyStatusBadge } from '@/components/ui/badge';
 import { ListCell, ListHead, ListHeadCell, ListRow, ListShell } from '@/components/ui/table';
-import { rupiah, tanggalWaktu } from '@/lib/format';
+import { rupiah, tanggalPanjang, tanggalWaktu } from '@/lib/format';
 import { LICENSE_TYPE_LABEL, PAKET_LABEL } from '@/lib/tier';
 import type { Key } from '@/types';
 
 import { HardwareId } from './hardware-id-sel';
 import { KeyAksi, KeySalin } from './key-aksi';
+import { KeyPerpanjang } from './key-perpanjang';
 
 /**
  * ============================================================================
@@ -119,6 +120,15 @@ export function KeyDaftar({ keys }: { keys: Key[] }) {
             {/* 5 — Pilihan */}
             <ListCell label="Pilihan">
               <span>{LICENSE_TYPE_LABEL[k.pilihan]}</span>
+              {k.pilihan === 'langganan' ? (
+                <div className="mt-1 text-[11px] leading-snug text-zinc-500">
+                  <div>Expired: {k.expires_at ? tanggalPanjang(k.expires_at) : '-'}</div>
+                  <div>
+                    Bulan ke-{k.langganan_bulan_terakhir} dari 12 · Terbayar{' '}
+                    {rupiah(k.langganan_komisi_terbayar)}
+                  </div>
+                </div>
+              ) : null}
             </ListCell>
 
             {/* 6 — Komisi */}
@@ -148,6 +158,11 @@ export function KeyDaftar({ keys }: { keys: Key[] }) {
                   paket: k.paket,
                   pilihan: k.pilihan,
                 }}
+              />
+              <KeyPerpanjang
+                id={k.id}
+                pilihan={k.pilihan}
+                hargaAcuan={k.harga_produk_acuan}
               />
             </div>
           </ListRow>

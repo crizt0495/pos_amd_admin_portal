@@ -86,6 +86,10 @@ export interface Key {
    * pernah perlu memeriksa null untuk menjumlahkannya.
    */
   harga_produk_acuan: number;
+  /** Bulan langganan terakhir yang tercatat di langganan_pembayaran (0 = belum ada). */
+  langganan_bulan_terakhir: number;
+  /** Total komisi langganan_toko yang sudah tercatat untuk lisensi ini. */
+  langganan_komisi_terbayar: number;
 }
 
 /**
