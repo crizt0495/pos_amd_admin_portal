@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Inbox, KeyRound, Store, Wallet } from 'lucide-react';
 
-import { angkaRingkas, rupiahRingkas } from '@/lib/format';
+import { angka, rupiah } from '@/lib/format';
 import { PERSEN_ESTIMASI_KOMISI } from '@/lib/produk';
 import { cn } from '@/lib/utils';
 
@@ -16,11 +16,12 @@ export interface StatData {
 }
 
 /**
- * Kartu statistik dashboard. `format` menentukan gaya angka supaya kartu
- * komisi rupiah tidak memakai pemisah ribuan yang membingungkan.
+ * Kartu statistik dashboard. `format` menentukan gaya angka: rupiah
+ * ("Rp. 1.250.000") atau angka berpemisah ribuan ("12.500") — semua
+ * memakai format ribuan gaya Indonesia, tanpa singkatan "jt"/"rb".
  */
 export function StatCard({ label, nilai, format = 'angka', sub, Icon, tone = 'netral' }: StatData) {
-  const teks = format === 'rupiah' ? rupiahRingkas(nilai) : angkaRingkas(nilai);
+  const teks = format === 'rupiah' ? rupiah(nilai) : angka(nilai);
 
   return (
     <div

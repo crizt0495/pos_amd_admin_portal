@@ -11,7 +11,7 @@ import {
   ListRow,
   ListShell,
 } from '@/components/ui/table';
-import { rupiah, sejak } from '@/lib/format';
+import { angka, rupiah, sejak } from '@/lib/format';
 import type { Store } from '@/types';
 
 /**
@@ -306,7 +306,7 @@ export function AkunDaftar({
 
                 {/* 6 - Terjual */}
                 <ListCell label="Terjual" className="tabular lg:text-right">
-                  <span>{s.total_terjual}</span>
+                  <span>{angka(s.total_terjual)}</span>
                 </ListCell>
 
                 {/* 7 - Sisa kuota */}

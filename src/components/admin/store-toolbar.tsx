@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { AlertBox, EmptyState } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { hapusPilih, usePilih } from '@/lib/pilih-store';
+import { angka } from '@/lib/format';
 import { useDebounce } from '@/lib/useDebounce';
 import { cekJumlahKey } from '@/lib/validasi';
 import type { StoreRowData } from '@/types';
@@ -117,7 +118,7 @@ export function StoreToolbar({ q, total }: { q: string; total: number }) {
             </>
           ) : (
             <span className="text-[12.5px] text-zinc-500">
-              {total} toko · centang untuk top up massal
+              {angka(total)} toko · centang untuk top up massal
             </span>
           )}
         </div>

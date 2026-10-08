@@ -7,7 +7,7 @@ import { DashboardStats } from '@/components/admin/stat-card';
 import { SalesChart } from '@/components/admin/sales-chart';
 import { StoreStatusBadge, TierBadge } from '@/components/ui/badge';
 import { getDashboard } from '@/lib/data';
-import { rupiah, sejak, tanggalPendek } from '@/lib/format';
+import { angka, rupiah, sejak, tanggalPendek } from '@/lib/format';
 import { requireAdmin } from '@/lib/supabase/guard';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -94,7 +94,7 @@ export default async function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-semibold text-zinc-900">{s.nama_toko}</p>
                     <p className="truncate text-[12px] text-zinc-500">
-                      {s.email ?? '-'} · {s.total_terjual} terjual · sisa {s.sisa_kuota} key
+                      {s.email ?? '-'} · {angka(s.total_terjual)} terjual · sisa {angka(s.sisa_kuota)} key
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

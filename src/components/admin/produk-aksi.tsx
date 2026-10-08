@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/modal';
 import { AlertBox } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { produkError } from '@/lib/produk';
+import { angka } from '@/lib/format';
 
 /**
  * ============================================================================
@@ -227,9 +228,9 @@ function ProdukFormDialog({
             id="p-sekali"
             className="tabular"
             inputMode="numeric"
-            value={sekali}
+            value={sekali === '' ? '' : angka(Number(sekali))}
             onChange={(e) => setSekali(e.target.value.replace(/[^\d]/g, ''))}
-            placeholder="500000"
+            placeholder="500.000"
           />
         </Field>
 
@@ -242,9 +243,9 @@ function ProdukFormDialog({
             id="p-langganan"
             className="tabular"
             inputMode="numeric"
-            value={langganan}
+            value={langganan === '' ? '' : angka(Number(langganan))}
             onChange={(e) => setLangganan(e.target.value.replace(/[^\d]/g, ''))}
-            placeholder="250000"
+            placeholder="250.000"
           />
         </Field>
 

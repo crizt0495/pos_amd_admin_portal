@@ -1,4 +1,4 @@
-import { rupiahRingkas } from '@/lib/format';
+import { rupiah } from '@/lib/format';
 import type { SalesPoint } from '@/types';
 
 /**
@@ -136,7 +136,7 @@ export function SalesChart({ data }: { data: SalesPoint[] }) {
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-zinc-400" />
-          Komisi per hari ({rupiahRingkas(data.reduce((s, d) => s + d.komisi, 0))} total)
+          Komisi per hari ({rupiah(data.reduce((s, d) => s + d.komisi, 0))} total)
         </span>
       </div>
     </div>

@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { KuotaBadge, StoreStatusBadge, TierBadge } from '@/components/ui/badge';
 import { ListCell, ListHead, ListHeadCell, ListRow, ListShell } from '@/components/ui/table';
-import { sejak } from '@/lib/format';
+import { angka, sejak } from '@/lib/format';
 import type { Store } from '@/types';
 
 import { PilihSemua, StoreAksi, StorePilih } from './store-aksi';
@@ -122,7 +122,7 @@ export function StoreDaftar({ stores }: { stores: Store[] }) {
 
             {/* 7 — Terjual */}
             <ListCell label="Terjual" className="tabular lg:text-right">
-              <span>{s.total_terjual}</span>
+              <span>{angka(s.total_terjual)}</span>
             </ListCell>
 
             {/* 8 — Sisa kuota */}

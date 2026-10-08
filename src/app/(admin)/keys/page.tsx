@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { KeyDaftar } from '@/components/admin/key-daftar';
 import { KeyKosong, KeyPaginasi, KeyToolbar } from '@/components/admin/key-toolbar';
 import { getKeys, getRingkasanKey } from '@/lib/data';
+import { angka } from '@/lib/format';
 import { requireAdmin } from '@/lib/supabase/guard';
 import type { LicenseStatus } from '@/types';
 
@@ -54,7 +55,7 @@ export default async function KeysPage({
       {/* Judul halaman sudah ada di app bar, jadi di sini cukup ringkasan. */}
       <header>
         <p className="text-[13px] text-zinc-500">
-          {total} key dari semua toko · {ringkasan.active} aktif · {ringkasan.unused} belum dipakai
+          {angka(total)} key dari semua toko · {angka(ringkasan.active)} aktif · {angka(ringkasan.unused)} belum dipakai
           · {ringkasan.revoked} dicabut
         </p>
       </header>

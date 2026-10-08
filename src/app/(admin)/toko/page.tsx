@@ -6,6 +6,7 @@ import { UserPlus } from 'lucide-react';
 import { StoreDaftar } from '@/components/admin/store-daftar';
 import { StoreKosong, StorePaginasi, StoreToolbar } from '@/components/admin/store-toolbar';
 import { getStoresPaged } from '@/lib/data';
+import { angka } from '@/lib/format';
 import { requireAdmin } from '@/lib/supabase/guard';
 
 export const metadata: Metadata = { title: 'Manajemen Toko' };
@@ -46,7 +47,7 @@ export default async function TokoPage({
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         {/* Judul ada di app bar; di sini cukup ringkasan angka. */}
         <p className="text-[13px] text-zinc-500">
-          {total} toko terdaftar · {stores.filter((s) => s.is_active).length} aktif di halaman ini
+          {angka(total)} toko terdaftar · {stores.filter((s) => s.is_active).length} aktif di halaman ini
         </p>
         <Link
           href="/toko/baru"
@@ -71,7 +72,7 @@ export default async function TokoPage({
         <>
           <p className="text-[12px] text-zinc-500">
             Menampilkan {(hal - 1) * perHalaman + 1}–{Math.min(hal * perHalaman, total)} dari{' '}
-            {total} toko
+            {angka(total)} toko
             {q ? ` untuk "${q}"` : ''}
           </p>
 
